@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"sort"
 	"testing"
+
+	. "github.com/bobappleyard/er"
 )
 
 func TestLine(t *testing.T) {
@@ -44,7 +46,7 @@ func TestLine(t *testing.T) {
 			Identifying: true,
 		},
 	}
-	m.logicalToPhysical()
+	logicalToPhysical(&m)
 	testAttrs(t, m.Types[1].Attributes, []string{"name", "parent_name", "f_name", "f_parent_name"})
 }
 
@@ -97,7 +99,7 @@ func TestTriangle(t *testing.T) {
 		},
 	}
 
-	m.logicalToPhysical()
+	logicalToPhysical(&m)
 	testAttrs(t, m.Types[1].Attributes, []string{"name", "parent_name", "f_name"})
 }
 
@@ -159,7 +161,7 @@ func TestSquare(t *testing.T) {
 		},
 	}
 
-	m.logicalToPhysical()
+	logicalToPhysical(&m)
 	testAttrs(t, m.Types[2].Attributes, []string{"name", "parent_name", "f_name"})
 }
 
@@ -231,7 +233,7 @@ func TestSquareLongRiser(t *testing.T) {
 		},
 	}
 
-	m.logicalToPhysical()
+	logicalToPhysical(&m)
 	testAttrs(t, m.Types[2].Attributes, []string{"name", "parent_name", "f_name", "f_parent_name"})
 }
 
@@ -322,7 +324,7 @@ func TestCube(t *testing.T) {
 		},
 	}
 
-	m.logicalToPhysical()
+	logicalToPhysical(&m)
 	testAttrs(t, m.Types[2].Attributes, []string{"name", "f_name", "parent_name", "parent2_name"})
 }
 
@@ -405,7 +407,7 @@ func TestCubeShared(t *testing.T) {
 		},
 	}
 
-	m.logicalToPhysical()
+	logicalToPhysical(&m)
 	testAttrs(t, m.Types[2].Attributes, []string{"name", "f_name", "parent_name"})
 }
 
@@ -472,7 +474,7 @@ func TestTriangleTwin(t *testing.T) {
 		},
 	}
 
-	m.logicalToPhysical()
+	logicalToPhysical(&m)
 	testAttrs(t, m.Types[1].Attributes, []string{"name", "parent_name", "f_name"})
 }
 
