@@ -7,6 +7,7 @@ import (
 
 // EntityModel represents a collection of entity types and how they relate.
 type EntityModel struct {
+	Name  string
 	Types []*EntityType
 }
 

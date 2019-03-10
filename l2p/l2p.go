@@ -1,4 +1,4 @@
-package er
+package l2p
 
 import (
 	"github.com/bobappleyard/er"
@@ -38,7 +38,7 @@ func sortRels(m *er.EntityModel) ([]*er.Relationship, error) {
 	return res, nil
 }
 
-func logicalToPhysical(m *er.EntityModel) error {
+func LogicalToPhysical(m *er.EntityModel) error {
 	rs, err := sortRels(m)
 	if err != nil {
 		return err
@@ -127,20 +127,20 @@ func (r *relationshipImplementation) implement() {
 	for i, a := range r.key {
 		s := r.subs[a]
 		targ := a.Of.(*er.Attribute)
-		if s, ok := s.(unify.Var); ok {
+		switch s := s.(type) {
+		case unify.Var:
 			attr := s.Of.(*er.Attribute)
 			r.r.Source.Attributes = append(r.r.Source.Attributes, attr)
 			r.r.Implementation[i] = er.Implementation{
 				Target: targ,
 				Source: attr,
 			}
-			continue
-		}
-		src := s.(unify.Apply)
-		r.r.Implementation[i] = er.Implementation{
-			Target:   targ,
-			Source:   src.Fn.(*er.Attribute),
-			BasePath: pathFromTrace((src.Args[0].(unify.Apply)).Fn),
+		case unify.Apply:
+			r.r.Implementation[i] = er.Implementation{
+				Target:   targ,
+				Source:   s.Fn.(*er.Attribute),
+				BasePath: pathFromTrace((s.Args[0].(unify.Apply)).Fn),
+			}
 		}
 	}
 }
@@ -161,22 +161,22 @@ func followRiser(r er.Riser, subs unify.Subs) (unify.Term, unify.Subs, error) {
 
 func followPath(path []er.Component, subs unify.Subs, sourceAttr func(*er.Attribute, []er.Component) unify.Term) (unify.Term, unify.Subs, error) {
 	var err error
-	var target unify.Term
-	for idx, cc := range path {
-		cr := cc.Rel
+	var dest unify.Term
+	for idx := range path {
+		cr := path[idx].Rel
 		source := unify.Apply{Fn: cr.Target, Args: make([]unify.Term, len(cr.Implementation))}
 		for i, a := range cr.Implementation {
 			source.Args[i] = sourceAttr(a.Source, path[:idx])
 		}
-		target = term(cr.Target, func(a *er.Attribute) unify.Term {
+		dest = term(cr.Target, func(a *er.Attribute) unify.Term {
 			return unify.Var{Of: a}
 		})
-		subs, err = unify.Unify(source, target, subs)
+		subs, err = unify.Unify(source, dest, subs)
 		if err != nil {
 			return nil, nil, err
 		}
 	}
-	return target, subs, nil
+	return dest, subs, nil
 }
 
 type trace struct {
