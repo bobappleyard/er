@@ -26,23 +26,26 @@ func TestLine(t *testing.T) {
 			},
 		}
 	}
-	m.Types[1].Relationships = []*Relationship{
+	a := m.Types[0]
+	b := m.Types[1]
+	c := m.Types[2]
+	b.Relationships = []*Relationship{
 		{
 			Name:   "parent",
-			Source: m.Types[1],
-			Target: m.Types[0],
+			Source: b,
+			Target: a,
 		},
 		{
 			Name:   "f",
-			Source: m.Types[1],
-			Target: m.Types[2],
+			Source: b,
+			Target: c,
 		},
 	}
-	m.Types[2].Relationships = []*Relationship{
+	c.Relationships = []*Relationship{
 		{
 			Name:        "parent",
-			Source:      m.Types[2],
-			Target:      m.Types[0],
+			Source:      c,
+			Target:      a,
 			Identifying: true,
 		},
 	}
@@ -68,33 +71,36 @@ func TestTriangle(t *testing.T) {
 			},
 		}
 	}
-	m.Types[1].Relationships = []*Relationship{
+	a := m.Types[0]
+	b := m.Types[1]
+	c := m.Types[2]
+	b.Relationships = []*Relationship{
 		{
 			Name:   "parent",
-			Source: m.Types[1],
-			Target: m.Types[0],
+			Source: b,
+			Target: a,
 		},
 		{
 			Name:   "f",
-			Source: m.Types[1],
-			Target: m.Types[2],
+			Source: b,
+			Target: c,
 		},
 	}
-	m.Types[2].Relationships = []*Relationship{
+	c.Relationships = []*Relationship{
 		{
 			Name:        "parent",
-			Source:      m.Types[2],
-			Target:      m.Types[0],
+			Source:      c,
+			Target:      a,
 			Identifying: true,
 		},
 	}
-	m.Types[1].Relationships[1].Constraints = []Constraint{
+	b.Relationships[1].Constraints = []Constraint{
 		{
 			Diagonal{Components: []Component{
-				{Rel: m.Types[1].Relationships[0]},
+				{Rel: b.Relationships[0]},
 			}},
 			Riser{[]Component{
-				{Rel: m.Types[2].Relationships[0]},
+				{Rel: c.Relationships[0]},
 			}},
 		},
 	}
@@ -112,6 +118,10 @@ func TestSquare(t *testing.T) {
 			{Name: "d"},
 		},
 	}
+	a := m.Types[0]
+	b := m.Types[1]
+	c := m.Types[2]
+	d := m.Types[3]
 	for _, t := range m.Types {
 		t.Attributes = []*Attribute{
 			{
@@ -122,41 +132,41 @@ func TestSquare(t *testing.T) {
 			},
 		}
 	}
-	m.Types[0].Relationships = []*Relationship{
+	a.Relationships = []*Relationship{
 		{
 			Name:   "s",
-			Source: m.Types[0],
-			Target: m.Types[1],
+			Source: a,
+			Target: b,
 		},
 	}
-	m.Types[2].Relationships = []*Relationship{
+	c.Relationships = []*Relationship{
 		{
 			Name:   "parent",
-			Source: m.Types[2],
-			Target: m.Types[0],
+			Source: c,
+			Target: a,
 		},
 		{
 			Name:   "f",
-			Source: m.Types[2],
-			Target: m.Types[3],
+			Source: c,
+			Target: d,
 		},
 	}
-	m.Types[3].Relationships = []*Relationship{
+	d.Relationships = []*Relationship{
 		{
 			Name:        "parent",
-			Source:      m.Types[3],
-			Target:      m.Types[1],
+			Source:      d,
+			Target:      b,
 			Identifying: true,
 		},
 	}
-	m.Types[2].Relationships[1].Constraints = []Constraint{
+	c.Relationships[1].Constraints = []Constraint{
 		{
 			Diagonal{[]Component{
-				{Rel: m.Types[2].Relationships[0]},
-				{Rel: m.Types[0].Relationships[0]},
+				{Rel: c.Relationships[0]},
+				{Rel: a.Relationships[0]},
 			}},
 			Riser{[]Component{
-				{Rel: m.Types[3].Relationships[0]},
+				{Rel: d.Relationships[0]},
 			}},
 		},
 	}
@@ -175,6 +185,11 @@ func TestSquareLongRiser(t *testing.T) {
 			{Name: "e"},
 		},
 	}
+	a := m.Types[0]
+	b := m.Types[1]
+	c := m.Types[2]
+	d := m.Types[3]
+	e := m.Types[4]
 	for _, t := range m.Types {
 		t.Attributes = []*Attribute{
 			{
@@ -185,50 +200,50 @@ func TestSquareLongRiser(t *testing.T) {
 			},
 		}
 	}
-	m.Types[0].Relationships = []*Relationship{
+	a.Relationships = []*Relationship{
 		{
 			Name:   "s",
-			Source: m.Types[0],
-			Target: m.Types[1],
+			Source: a,
+			Target: b,
 		},
 	}
-	m.Types[2].Relationships = []*Relationship{
+	c.Relationships = []*Relationship{
 		{
 			Name:   "parent",
-			Source: m.Types[2],
-			Target: m.Types[0],
+			Source: c,
+			Target: a,
 		},
 		{
 			Name:   "f",
-			Source: m.Types[2],
-			Target: m.Types[4],
+			Source: c,
+			Target: e,
 		},
 	}
-	m.Types[3].Relationships = []*Relationship{
+	d.Relationships = []*Relationship{
 		{
 			Name:        "parent",
-			Source:      m.Types[3],
-			Target:      m.Types[1],
+			Source:      d,
+			Target:      b,
 			Identifying: true,
 		},
 	}
-	m.Types[4].Relationships = []*Relationship{
+	e.Relationships = []*Relationship{
 		{
 			Name:        "parent",
-			Source:      m.Types[4],
-			Target:      m.Types[3],
+			Source:      e,
+			Target:      d,
 			Identifying: true,
 		},
 	}
-	m.Types[2].Relationships[1].Constraints = []Constraint{
+	c.Relationships[1].Constraints = []Constraint{
 		{
 			Diagonal{[]Component{
-				{Rel: m.Types[2].Relationships[0]},
-				{Rel: m.Types[0].Relationships[0]},
+				{Rel: c.Relationships[0]},
+				{Rel: a.Relationships[0]},
 			}},
 			Riser{[]Component{
-				{Rel: m.Types[4].Relationships[0]},
-				{Rel: m.Types[3].Relationships[0]},
+				{Rel: e.Relationships[0]},
+				{Rel: d.Relationships[0]},
 			}},
 		},
 	}
@@ -248,6 +263,12 @@ func TestCube(t *testing.T) {
 			{Name: "f"},
 		},
 	}
+	a := m.Types[0]
+	b := m.Types[1]
+	c := m.Types[2]
+	d := m.Types[3]
+	e := m.Types[4]
+	f := m.Types[5]
 	for _, t := range m.Types {
 		t.Attributes = []*Attribute{
 			{
@@ -258,68 +279,68 @@ func TestCube(t *testing.T) {
 			},
 		}
 	}
-	m.Types[0].Relationships = []*Relationship{
+	a.Relationships = []*Relationship{
 		{
 			Name:   "s",
-			Source: m.Types[0],
-			Target: m.Types[1],
+			Source: a,
+			Target: b,
 		},
 	}
-	m.Types[2].Relationships = []*Relationship{
+	c.Relationships = []*Relationship{
 		{
 			Name:   "parent",
-			Source: m.Types[2],
-			Target: m.Types[0],
+			Source: c,
+			Target: a,
 		},
 		{
 			Name:   "f",
-			Source: m.Types[2],
-			Target: m.Types[3],
+			Source: c,
+			Target: d,
 		},
 		{
 			Name:   "parent2",
-			Source: m.Types[2],
-			Target: m.Types[4],
+			Source: c,
+			Target: e,
 		},
 	}
-	m.Types[3].Relationships = []*Relationship{
+	d.Relationships = []*Relationship{
 		{
 			Name:        "parent",
-			Source:      m.Types[3],
-			Target:      m.Types[1],
+			Source:      d,
+			Target:      b,
 			Identifying: true,
 		},
 		{
 			Name:        "parent2",
-			Source:      m.Types[3],
-			Target:      m.Types[5],
+			Source:      d,
+			Target:      f,
 			Identifying: true,
 		},
 	}
-	m.Types[4].Relationships = []*Relationship{
+	e.Relationships = []*Relationship{
 		{
 			Name:   "s2",
-			Source: m.Types[4],
-			Target: m.Types[5],
+			Source: e,
+			Target: f,
 		},
 	}
-	m.Types[2].Relationships[1].Constraints = []Constraint{
+	c.Relationships[1].Constraints = []Constraint{
 		{
 			Diagonal{[]Component{
-				{Rel: m.Types[2].Relationships[0]},
-				{Rel: m.Types[0].Relationships[0]},
+				{Rel: c.Relationships[0]},
+				{Rel: a.Relationships[0]},
 			}},
 			Riser{[]Component{
-				{Rel: m.Types[3].Relationships[0]},
+				{Rel: d.Relationships[0]},
 			}},
 		},
 		{
 			Diagonal{[]Component{
-				{Rel: m.Types[2].Relationships[2]},
-				{Rel: m.Types[4].Relationships[0]},
+				{Rel: c.Relationships[2]},
+				{Rel: e.Relationships[0]},
 			}},
 			Riser{[]Component{
-				{Rel: m.Types[3].Relationships[1]},
+				{Rel: d.Relationships[1]},
 			}},
 		},
 	}
@@ -338,6 +359,11 @@ func TestCubeShared(t *testing.T) {
 			{Name: "e"},
 		},
 	}
+	a := m.Types[0]
+	b := m.Types[1]
+	c := m.Types[2]
+	d := m.Types[3]
+	e := m.Types[4]
 	for _, t := range m.Types {
 		t.Attributes = []*Attribute{
 			{
@@ -348,61 +374,61 @@ func TestCubeShared(t *testing.T) {
 			},
 		}
 	}
-	m.Types[0].Relationships = []*Relationship{
+	a.Relationships = []*Relationship{
 		{
 			Name:   "s",
-			Source: m.Types[0],
-			Target: m.Types[1],
+			Source: a,
+			Target: b,
 		},
 		{
 			Name:   "s2",
-			Source: m.Types[0],
-			Target: m.Types[4],
+			Source: a,
+			Target: e,
 		},
 	}
-	m.Types[2].Relationships = []*Relationship{
+	c.Relationships = []*Relationship{
 		{
 			Name:   "parent",
-			Source: m.Types[2],
-			Target: m.Types[0],
+			Source: c,
+			Target: a,
 		},
 		{
 			Name:   "f",
-			Source: m.Types[2],
-			Target: m.Types[3],
+			Source: c,
+			Target: d,
 		},
 	}
-	m.Types[3].Relationships = []*Relationship{
+	d.Relationships = []*Relationship{
 		{
 			Name:        "parent",
-			Source:      m.Types[3],
-			Target:      m.Types[1],
+			Source:      d,
+			Target:      b,
 			Identifying: true,
 		},
 		{
 			Name:        "parent2",
-			Source:      m.Types[3],
-			Target:      m.Types[4],
+			Source:      d,
+			Target:      e,
 			Identifying: true,
 		},
 	}
-	m.Types[2].Relationships[1].Constraints = []Constraint{
+	c.Relationships[1].Constraints = []Constraint{
 		{
 			Diagonal{[]Component{
-				{Rel: m.Types[2].Relationships[0]},
-				{Rel: m.Types[0].Relationships[0]},
+				{Rel: c.Relationships[0]},
+				{Rel: a.Relationships[0]},
 			}},
 			Riser{[]Component{
-				{Rel: m.Types[3].Relationships[0]},
+				{Rel: d.Relationships[0]},
 			}},
 		},
 		{
 			Diagonal{[]Component{
-				{Rel: m.Types[2].Relationships[0]},
-				{Rel: m.Types[0].Relationships[1]},
+				{Rel: c.Relationships[0]},
+				{Rel: a.Relationships[1]},
 			}},
 			Riser{[]Component{
-				{Rel: m.Types[3].Relationships[1]},
+				{Rel: d.Relationships[1]},
 			}},
 		},
 	}
@@ -419,6 +445,9 @@ func TestTriangleTwin(t *testing.T) {
 			{Name: "c"},
 		},
 	}
+	a := m.Types[0]
+	b := m.Types[1]
+	c := m.Types[2]
 	for _, t := range m.Types {
 		t.Attributes = []*Attribute{
 			{
@@ -429,47 +458,47 @@ func TestTriangleTwin(t *testing.T) {
 			},
 		}
 	}
-	m.Types[1].Relationships = []*Relationship{
+	b.Relationships = []*Relationship{
 		{
 			Name:   "parent",
-			Source: m.Types[1],
-			Target: m.Types[0],
+			Source: b,
+			Target: a,
 		},
 		{
 			Name:   "f",
-			Source: m.Types[1],
-			Target: m.Types[2],
+			Source: b,
+			Target: c,
 		},
 	}
-	m.Types[2].Relationships = []*Relationship{
+	c.Relationships = []*Relationship{
 		{
 			Name:        "parent",
-			Source:      m.Types[2],
-			Target:      m.Types[0],
+			Source:      c,
+			Target:      a,
 			Identifying: true,
 		},
 		{
 			Name:        "parent2",
-			Source:      m.Types[2],
-			Target:      m.Types[0],
+			Source:      c,
+			Target:      a,
 			Identifying: true,
 		},
 	}
-	m.Types[1].Relationships[1].Constraints = []Constraint{
+	b.Relationships[1].Constraints = []Constraint{
 		{
 			Diagonal{Components: []Component{
-				{Rel: m.Types[1].Relationships[0]},
+				{Rel: b.Relationships[0]},
 			}},
 			Riser{[]Component{
-				{Rel: m.Types[2].Relationships[0]},
+				{Rel: c.Relationships[0]},
 			}},
 		},
 		{
 			Diagonal{Components: []Component{
-				{Rel: m.Types[1].Relationships[0]},
+				{Rel: b.Relationships[0]},
 			}},
 			Riser{[]Component{
-				{Rel: m.Types[2].Relationships[1]},
+				{Rel: c.Relationships[1]},
 			}},
 		},
 	}
