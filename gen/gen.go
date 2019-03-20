@@ -12,7 +12,10 @@ func generate(m *er.EntityModel) (*ast.File, error) {
 	f := &ast.File{
 		Name: &ast.Ident{Name: m.Name},
 	}
-	fs := addStructType(f, "Model")
+	addImports(f, "sort", "github.com/bobappleyard/er")
+	fs := addstructType(f, "Model")
+	generateNewFunc(f, m)
+	generateValidateMethod(f, fs, m)
 	for _, t := range m.Types {
 		generateType(f, t)
 		generateListType(f, fs, t)
@@ -20,37 +23,132 @@ func generate(m *er.EntityModel) (*ast.File, error) {
 	return f, nil
 }
 
+func generateNewFunc(f *ast.File, m *er.EntityModel) {
+	nimp := addFunc(f, nil, "New", nil, ret(ptr(id("Model"))))
+	nimp.List = append(nimp.List, &ast.AssignStmt{
+		Lhs: []ast.Expr{id("m")},
+		Tok: token.DEFINE,
+		Rhs: []ast.Expr{call(id("new"), id("Model"))},
+	})
+	for _, t := range m.Types {
+		tn := snakeToGo(t.Name)
+		nimp.List = append(nimp.List, assign(sel(id("m"), tn), &ast.CompositeLit{
+			Type: id(tn + "_List"),
+			Elts: []ast.Expr{&ast.KeyValueExpr{
+				Key:   id("model"),
+				Value: id("m"),
+			}},
+		}))
+	}
+	nimp.List = append(nimp.List, &ast.ReturnStmt{Results: []ast.Expr{
+		id("m"),
+	}})
+}
+
+func generateValidateMethod(f *ast.File, fs structType, m *er.EntityModel) {
+	vimp := fs.addPointerMethod("Validate", nil, args(field("err", id("error"))))
+	for _, t := range m.Types {
+		tn := snakeToGo(t.Name)
+		vimp.List = append(vimp.List, &ast.ExprStmt{X: call(sel(id("m"), tn, "validate"), &ast.UnaryExpr{
+			Op: token.AND,
+			X:  id("err"),
+		})})
+	}
+	vimp.List = append(vimp.List, &ast.ReturnStmt{Results: []ast.Expr{
+		id("err"),
+	}})
+}
+
 func generateType(f *ast.File, t *er.EntityType) {
 	tn := snakeToGo(t.Name)
-	tfs := addStructType(f, tn)
-	addField(tfs, "model", &ast.StarExpr{X: id("Model")})
 
-	kfs := addStructType(f, tn+"_Key")
-	kimp := addMethod(f, field("k", id(tn+"_Key")), "keyCompare",
-		[]*ast.Field{field("to", id(tn+"_Key"))},
-		[]*ast.Field{{Type: id("bool")}})
+	var attrs []ast.Spec
+
+	for i, a := range t.Attributes {
+		attr := &ast.ValueSpec{
+			Names: []*ast.Ident{{Name: "Attr_" + tn + "_" + snakeToGo(a.Name)}},
+		}
+		if i == 0 {
+			attr.Values = []ast.Expr{id("iota")}
+		}
+		attrs = append(attrs, attr)
+	}
+	f.Decls = append(f.Decls, &ast.GenDecl{
+		Lparen: 1,
+		Tok:    token.CONST,
+		Specs:  attrs,
+	})
+
+	tfs := addstructType(f, tn)
+	tfs.addField("model", ptr(id("Model")))
 
 	for _, a := range t.Attributes {
-		addField(tfs, snakeToGo(a.Name), attributeType(a))
-		if a.Identifying {
-			addField(kfs, snakeToGo(a.Name), attributeType(a))
-			generateKeyClause(kimp, a)
-		}
+		tfs.addField(snakeToGo(a.Name), attributeType(a))
 	}
-	kimp.List = append(kimp.List, &ast.ReturnStmt{
-		Results: []ast.Expr{id("true")},
-	})
 	for _, r := range t.Relationships {
-		addMethod(f, field("e", id(tn)), snakeToGo(r.Name), nil, []*ast.Field{{Type: id(snakeToGo(r.Target.Name))}})
+		m := tfs.addMethod(snakeToGo(r.Name), nil, ret(id(snakeToGo(r.Target.Name))))
+		generateRelationshipImplementation(f, r, m)
 	}
 }
 
-func generateListType(f *ast.File, fs *ast.FieldList, t *er.EntityType) {
+func generateRelationshipImplementation(f *ast.File, r *er.Relationship, impb *ast.BlockStmt) {
+	targ := snakeToGo(r.Target.Name)
+	rn := receiverName(r.Source.Name)
+	imp := &ast.CompositeLit{
+		Type: sel(id("er"), "Query"),
+	}
+	s := &ast.ReturnStmt{
+		Results: []ast.Expr{
+			index(call(
+				sel(id(rn), "model", targ, "Lookup"),
+				imp,
+			), &ast.BasicLit{Kind: token.INT, Value: "0"}),
+		},
+	}
+	impb.List = append(impb.List, s)
+	for _, c := range r.Implementation {
+		var path ast.Expr = id(rn)
+		for _, step := range c.BasePath {
+			path = call(sel(path, snakeToGo(step.Rel.Name)))
+		}
+		path = sel(path, snakeToGo(c.Source.Name))
+		imp.Elts = append(imp.Elts, path)
+	}
+}
+
+func generateListType(f *ast.File, fs structType, t *er.EntityType) {
 	tn := snakeToGo(t.Name)
 	ltn := tn + "_List"
-	addField(fs, tn, id(ltn))
-	tfs := addStructType(f, ltn)
-	addField(tfs, "items", &ast.ArrayType{Elt: id(tn)})
+	fs.addField(tn, id(ltn))
+	tfs := addstructType(f, ltn)
+	tfs.addField("model", ptr(id("Model")))
+	tfs.addField("meta", sel(id("er"), "EntityMeta"))
+	tfs.addField("items", &ast.ArrayType{Elt: id(tn)})
+	generateLookupMethod(tfs, t)
+}
+
+func generateLookupMethod(tfs structType, t *er.EntityType) {
+	tn := snakeToGo(t.Name)
+	rn := receiverName(tn)
+	imp := tfs.addMethod("Lookup", args(field("q", sel(id("er"), "Query"))), args(field("res", &ast.ArrayType{Elt: id(tn)}), field("err", id("error"))))
+	imp.List = append(imp.List,
+		define(id("idxs"), call(sel(id(rn), "meta", "EvalQuery"), id("q"), sel(id(rn), "items"))),
+		&ast.ForStmt{
+			Cond: call(sel(id("idxs"), "Next")),
+			Body: &ast.BlockStmt{
+				List: []ast.Stmt{
+					assign(id("res"), call(id("append"),
+						id("res"),
+						index(sel(id(rn), "items"), call(sel(id("idxs"), "This"))),
+					)),
+				},
+			},
+		},
+		&ast.ReturnStmt{Results: []ast.Expr{
+			id("res"),
+			call(sel(id("idxs"), "Err")),
+		}},
+	)
 }
 
 func attributeType(a *er.Attribute) ast.Expr {
@@ -66,21 +164,44 @@ func attributeType(a *er.Attribute) ast.Expr {
 	return id(at)
 }
 
-func generateKeyClause(kimp *ast.BlockStmt, a *er.Attribute) {
+func attributeColumnType(a *er.Attribute) ast.Expr {
+	var at string
+	switch a.Type {
+	case er.StringType:
+		at = "String"
+	case er.IntType:
+		at = "Int"
+	case er.FloatType:
+		at = "Float"
+	}
+	if a.Identifying {
+		at += "Index"
+	} else {
+		at += "Column"
+	}
+	return sel(id("er"), at)
+}
+
+func receiverName(n string) string {
+	return strings.ToLower(n[:1])
+}
+
+func generateKeyClause(kimp *ast.BlockStmt, kk ast.Expr, a *er.Attribute) {
 	name := snakeToGo(a.Name)
+	base := receiverName(a.Owner.Name)
 	kimp.List = append(kimp.List, &ast.IfStmt{
 		Cond: &ast.BinaryExpr{
-			X:  &ast.SelectorExpr{X: id("k"), Sel: id(name)},
+			X:  sel(id(base), name),
 			Op: token.NEQ,
-			Y:  &ast.SelectorExpr{X: id("to"), Sel: id(name)},
+			Y:  sel(kk, name),
 		},
 		Body: &ast.BlockStmt{
 			List: []ast.Stmt{
 				&ast.ReturnStmt{Results: []ast.Expr{
 					&ast.BinaryExpr{
-						X:  &ast.SelectorExpr{X: id("k"), Sel: id(name)},
+						X:  sel(id(base), name),
 						Op: token.LSS,
-						Y:  &ast.SelectorExpr{X: id("to"), Sel: id(name)},
+						Y:  sel(kk, name),
 					},
 				}},
 			},
@@ -88,48 +209,15 @@ func generateKeyClause(kimp *ast.BlockStmt, a *er.Attribute) {
 	})
 }
 
-func id(n string) *ast.Ident {
-	return &ast.Ident{Name: n}
-}
-
-func addField(fs *ast.FieldList, n string, t ast.Expr) {
-	fs.List = append(fs.List, field(n, t))
-}
-
-func field(n string, t ast.Expr) *ast.Field {
-	return &ast.Field{Names: []*ast.Ident{id(n)}, Type: t}
-}
-
-func addMethod(f *ast.File, recv *ast.Field, n string, args, res []*ast.Field) *ast.BlockStmt {
-	body := &ast.BlockStmt{}
-	f.Decls = append(f.Decls, &ast.FuncDecl{
-		Recv: &ast.FieldList{List: []*ast.Field{recv}},
-		Name: id(n),
-		Type: &ast.FuncType{
-			Params:  &ast.FieldList{List: args},
-			Results: &ast.FieldList{List: res},
-		},
-		Body: body,
-	})
-	return body
-}
-
-func addType(f *ast.File, name string, t ast.Expr) {
-	f.Decls = append(f.Decls, &ast.GenDecl{
-		Tok: token.TYPE,
-		Specs: []ast.Spec{
-			&ast.TypeSpec{
-				Name: id(name),
-				Type: t,
-			},
+func generateKeyGet(kget *ast.CompositeLit, a *er.Attribute) {
+	aname := snakeToGo(a.Name)
+	kget.Elts = append(kget.Elts, &ast.KeyValueExpr{
+		Key: id(aname),
+		Value: &ast.SelectorExpr{
+			X:   id(receiverName(a.Owner.Name)),
+			Sel: id(aname),
 		},
 	})
-}
-
-func addStructType(f *ast.File, name string) *ast.FieldList {
-	fields := &ast.FieldList{}
-	addType(f, name, &ast.StructType{Fields: fields})
-	return fields
 }
 
 var snPat = regexp.MustCompile(`(^|_).`)

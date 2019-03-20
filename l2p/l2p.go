@@ -131,6 +131,10 @@ func (r *relationshipImplementation) implement() {
 		case unify.Var:
 			attr := s.Of.(*er.Attribute)
 			r.r.Source.Attributes = append(r.r.Source.Attributes, attr)
+			if attr.Identifying {
+				copy(r.r.Source.Attributes[1:], r.r.Source.Attributes)
+				r.r.Source.Attributes[0] = attr
+			}
 			r.r.Implementation[i] = er.Implementation{
 				Target: targ,
 				Source: attr,
