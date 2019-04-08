@@ -1,81 +1,82 @@
 package gen
 
 import (
-	"bytes"
-	"github.com/bobappleyard/er"
+	. "github.com/bobappleyard/er"
 	"github.com/bobappleyard/er/l2p"
-	"go/format"
-	"go/token"
 	"testing"
 )
 
 func TestGen(t *testing.T) {
-	m := &er.EntityModel{
+	m := &EntityModel{
 		Name: "square",
-		Types: []*er.EntityType{
+		Types: []*EntityType{
 			{Name: "a"},
 			{Name: "b"},
 			{Name: "c"},
 			{Name: "d"},
 		},
 	}
+	a := m.Types[0]
+	b := m.Types[1]
+	c := m.Types[2]
+	d := m.Types[3]
 	for _, t := range m.Types {
-		t.Attributes = []*er.Attribute{
+		t.Attributes = []*Attribute{
 			{
 				Owner:       t,
 				Name:        "name",
-				Type:        er.StringType,
+				Type:        StringType,
 				Identifying: true,
 			},
 		}
 	}
-	m.Types[0].Relationships = []*er.Relationship{
+	a.Relationships = []*Relationship{
 		{
 			Name:   "s",
-			Source: m.Types[0],
-			Target: m.Types[1],
+			Source: a,
+			Target: b,
 		},
 	}
-	m.Types[2].Relationships = []*er.Relationship{
+	c.Relationships = []*Relationship{
 		{
 			Name:   "parent",
-			Source: m.Types[2],
-			Target: m.Types[0],
+			Source: c,
+			Target: a,
 		},
 		{
 			Name:   "f",
-			Source: m.Types[2],
-			Target: m.Types[3],
+			Source: c,
+			Target: d,
 		},
 	}
-	m.Types[3].Relationships = []*er.Relationship{
+	d.Relationships = []*Relationship{
 		{
 			Name:        "parent",
-			Source:      m.Types[3],
-			Target:      m.Types[1],
+			Source:      d,
+			Target:      b,
 			Identifying: true,
 		},
 	}
-	m.Types[2].Relationships[1].Constraints = []er.Constraint{
+	c.Relationships[1].Constraints = []Constraint{
 		{
-			er.Diagonal{[]er.Component{
-				{Rel: m.Types[2].Relationships[0]},
-				{Rel: m.Types[0].Relationships[0]},
+			Diagonal{[]Component{
+				{Rel: c.Relationships[0]},
+				{Rel: a.Relationships[0]},
 			}},
-			er.Riser{[]er.Component{
-				{Rel: m.Types[3].Relationships[0]},
+			Riser{[]Component{
+				{Rel: d.Relationships[0]},
 			}},
 		},
 	}
+	c.DependsOn = c.Relationships[0]
+	d.DependsOn = d.Relationships[0]
+
 	l2p.LogicalToPhysical(m)
-	p, err := generate(m)
+	bs, err := generate(m)
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	var b bytes.Buffer
-	b.WriteByte('\n')
-	format.Node(&b, token.NewFileSet(), p)
-	t.Log(b.String())
+	t.Log("\n" + string(bs))
 	t.Fail()
 }
