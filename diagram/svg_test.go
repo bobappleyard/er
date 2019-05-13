@@ -88,10 +88,10 @@ func TestGenerate(t *testing.T) {
 		return
 	}
 	l2p.LogicalToPhysical(m)
-	tw := towersFor(m)
+	tw := buildTowers(m)
 	tw.calcLayout(0, 0)
 	fmt.Println(tw)
 	t.Fail()
-	Generate(svg.New(f), m)
+	Draw(svg.New(f), m)
 	f.Close()
 }

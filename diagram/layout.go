@@ -1,7 +1,6 @@
 package diagram
 
 import (
-	"fmt"
 	"github.com/bobappleyard/er"
 	"math"
 )
@@ -27,7 +26,7 @@ type link struct {
 	from, to *tower
 }
 
-func towersFor(m *er.EntityModel) *tower {
+func buildTowers(m *er.EntityModel) *tower {
 	ts := map[*er.EntityType]*tower{}
 	for _, t := range m.Types {
 		ts[t] = &tower{t: t}
@@ -58,6 +57,28 @@ func (t *tower) calcLayout(x, y int) {
 		x += t.body.w
 	}
 	t.calcBodyBounds()
+}
+
+func (t *tower) calcEntityOrder() {
+	links := t.linkMap()
+	score := math.MaxInt32
+	order := firstPerm(len(t.down))
+	for p := firstPerm(len(t.down)); p != nil; p = nextPerm(p) {
+		newScore := t.calcScore(p, links)
+		if newScore < score {
+			score = newScore
+			copy(order, p)
+		}
+	}
+	newOrder := make(towers, len(t.down))
+	for i, u := range t.down {
+		newOrder[order[i]] = u
+	}
+	t.down = newOrder
+	for i, u := range t.down {
+		u.left = append(append([]*tower{}, t.left...), t.down[:i]...)
+		u.right = append(append([]*tower{}, t.right...), t.down[i+1:]...)
+	}
 }
 
 func (t *tower) calcHeadBounds() {
@@ -91,28 +112,6 @@ func (t *tower) calcBodyBounds() {
 	t.body.h += h
 	if w > t.body.w {
 		t.body.w = w
-	}
-}
-
-func (t *tower) calcEntityOrder() {
-	links := t.linkMap()
-	score := math.MaxInt32
-	order := firstPerm(len(t.down))
-	for p := firstPerm(len(t.down)); p != nil; p = nextPerm(p) {
-		newScore := t.calcScore(p, links)
-		if newScore < score {
-			score = newScore
-			copy(order, p)
-		}
-	}
-	newOrder := make(towers, len(t.down))
-	for i, u := range t.down {
-		newOrder[order[i]] = u
-	}
-	t.down = newOrder
-	for i, u := range t.down {
-		u.left = append(append([]*tower{}, t.left...), t.down[:i]...)
-		u.right = append(append([]*tower{}, t.right...), t.down[i+1:]...)
 	}
 }
 
@@ -182,25 +181,4 @@ func (t *tower) connections(u towers) int {
 		c += t.connections(u)
 	}
 	return c
-}
-
-func (t *tower) Format(state fmt.State, c rune) {
-	prefix := ""
-	for c := t.up; c != nil; c = c.up {
-		prefix += "  "
-	}
-	printf := func(format string, args ...interface{}) {
-		fmt.Fprintf(state, prefix+format+"\n", args...)
-	}
-	nm := ""
-	if t.t != nil {
-		nm = t.t.Name + " "
-	}
-	printf("%s{", nm)
-	printf("  head: %v", t.head)
-	printf("  body: %v", t.body)
-	for _, t := range t.down {
-		t.Format(state, c)
-	}
-	printf("}")
 }

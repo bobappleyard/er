@@ -5,8 +5,9 @@ import (
 	"github.com/bobappleyard/er"
 )
 
-func Generate(s *svg.SVG, m *er.EntityModel) {
-	tw := towersFor(m)
+// Draw a diagram for the model in question into the provided SVG.
+func Draw(s *svg.SVG, m *er.EntityModel) {
+	tw := buildTowers(m)
 	tw.calcLayout(0, 0)
 	s.Start(tw.body.w+5, tw.body.h+5)
 	for _, t := range tw.down {
