@@ -1,6 +1,7 @@
 package diagram
 
 import (
+	"fmt"
 	"github.com/ajstarks/svgo"
 	"github.com/bobappleyard/er/l2p"
 	"os"
@@ -14,6 +15,7 @@ func TestGenerate(t *testing.T) {
 		Name: "square",
 		Types: []*EntityType{
 			{Name: "a"},
+			{Name: "f"},
 			{Name: "b"},
 			{Name: "c"},
 			{Name: "d"},
@@ -30,7 +32,7 @@ func TestGenerate(t *testing.T) {
 			},
 		}
 	}
-	a, b, c, d, e := m.Types[0], m.Types[1], m.Types[2], m.Types[3], m.Types[4]
+	a, b, c, d, e := m.Types[0], m.Types[2], m.Types[5], m.Types[4], m.Types[3]
 	a.Relationships = []*Relationship{
 		{
 			Name:   "s",
@@ -86,6 +88,10 @@ func TestGenerate(t *testing.T) {
 		return
 	}
 	l2p.LogicalToPhysical(m)
+	tw := towersFor(m)
+	tw.calcLayout(0, 0)
+	fmt.Println(tw)
+	t.Fail()
 	Generate(svg.New(f), m)
 	f.Close()
 }
