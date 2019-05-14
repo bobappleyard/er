@@ -8,7 +8,7 @@ import (
 // Draw a diagram for the model in question into the provided SVG.
 func Draw(s *svg.SVG, m *er.EntityModel) {
 	tw := buildTowers(m)
-	tw.calcLayout(0, 0)
+	tw.layoutDiagram()
 	s.Start(tw.body.w+5, tw.body.h+5)
 	for _, t := range tw.down {
 		t.draw(s)
@@ -17,9 +17,13 @@ func Draw(s *svg.SVG, m *er.EntityModel) {
 }
 
 func (t *tower) draw(s *svg.SVG) {
+	// s.Rect(t.body.x, t.body.y, t.body.w, t.body.h, "fill:gray;opacity:0.5")
 	t.drawHead(s)
 	for _, t := range t.down {
 		t.draw(s)
+	}
+	for _, l := range t.lines {
+		s.Line(l.x1, l.y1, l.x2, l.y2, "stroke:black")
 	}
 }
 
