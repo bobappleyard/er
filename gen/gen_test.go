@@ -3,6 +3,9 @@ package gen
 import (
 	. "github.com/bobappleyard/er"
 	"github.com/bobappleyard/er/l2p"
+	"io/ioutil"
+	"os/exec"
+	"path"
 	"testing"
 )
 
@@ -77,6 +80,11 @@ func TestGen(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	t.Log("\n" + string(bs))
+	ioutil.WriteFile(path.Join("test", "pkg.go"), bs, 0777)
+	cmd := exec.Command("go", "build", "-o", "test/pkg.o", "test/pkg.go")
+	bs, err = cmd.CombinedOutput()
+	cmd = exec.Command("go", "test", "./test")
+	bs, err = cmd.CombinedOutput()
+	t.Log(string(bs))
 	t.Fail()
 }

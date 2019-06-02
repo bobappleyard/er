@@ -15,7 +15,8 @@ func generate(m *er.EntityModel) ([]byte, error) {
 	for _, action := range []func() error{
 		g.generateHeader,
 		g.generateModelDecl,
-		g.generateModelIO,
+		g.generateModelCRUD,
+		// g.generateModelIO,
 		g.generateEntities,
 	} {
 		if err := action(); err != nil {
@@ -37,8 +38,8 @@ func (g *generator) out(form string, args ...interface{}) {
 func (g *generator) generateHeader() error {
 	g.out("package %s", g.m.Name)
 	g.out("import (")
-	g.out("%q", "github.com/bobappleyard/er")
-	g.out("%q", "github.com/bobappleyard/rsf")
+	// g.out("%q", "github.com/bobappleyard/er")
+	g.out("%q", "github.com/bobappleyard/er/rtl")
 	g.out(")")
 	return nil
 }
@@ -54,7 +55,7 @@ func (g *generator) generateModelDecl() error {
 
 func (g *generator) generateModelIO() error {
 	g.out("func (m *Model) Unmarshal(bs []byte) error {")
-	g.out("p := rsf.NewReader(bs)")
+	g.out("p := rtl.NewReader(bs)")
 	g.out("for p.Next() == rsf.RecordStart {")
 	g.out("switch p.Name {")
 	for _, t := range g.dependants(nil) {
@@ -71,13 +72,24 @@ func (g *generator) generateModelIO() error {
 	return nil
 }
 
+func (g *generator) generateModelCRUD() error {
+	g.out("func (m *Model) Validate() error {")
+	for _, t := range g.m.Types {
+		g.out("if err := m.%s.validate(); err != nil { return err }", goName(t.Name))
+	}
+	g.out("return nil")
+	g.out("}")
+	return nil
+}
+
 func (g *generator) generateEntities() error {
 	for _, t := range g.m.Types {
 		g.out("")
 		for _, action := range []func(*er.EntityType) error{
 			g.generateDecls,
 			g.generateRelations,
-			g.generateIO,
+			g.generateCRUD,
+			// g.generateIO,
 		} {
 			if err := action(t); err != nil {
 				return err
@@ -94,6 +106,7 @@ func (g *generator) generateDecls(t *er.EntityType) error {
 		g.out("%s %s", goName(a.Name), attrType(a.Type))
 	}
 	g.out("}")
+	g.out("")
 	g.out("type %s_Set struct {", goName(t.Name))
 	g.out("model *Model")
 	for _, a := range t.Attributes {
@@ -104,6 +117,25 @@ func (g *generator) generateDecls(t *er.EntityType) error {
 }
 
 func (g *generator) generateRelations(t *er.EntityType) error {
+	return nil
+}
+
+func (g *generator) generateCRUD(t *er.EntityType) error {
+	g.out("func (s *%s_Set) Insert(e %[1]s) {", goName(t.Name))
+	for _, a := range t.Attributes {
+		g.out("s.%s.Insert(e.%[1]s)", goName(a.Name))
+	}
+	g.out("}")
+	g.out("")
+	g.out("func (s *%s_Set) validate() error {", goName(t.Name))
+	g.out("if err := rtl.EnsureUniqueness(")
+	for _, a := range t.Attributes {
+		g.out("&s.%s,", goName(a.Name))
+	}
+	g.out("); err != nil { return err }")
+	g.out("return nil")
+	g.out("}")
+	g.out("")
 	return nil
 }
 
@@ -180,11 +212,11 @@ func columnType(a *er.Attribute) string {
 	var tn string
 	switch a.Type {
 	case er.IntType:
-		tn = "er.Int"
+		tn = "rtl.Int"
 	case er.FloatType:
-		tn = "er.Float64"
+		tn = "rtl.Float64"
 	case er.StringType:
-		tn = "er.String"
+		tn = "rtl.String"
 	default:
 		return "?"
 	}
