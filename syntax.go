@@ -91,4 +91,5 @@ var (
 	ErrInvalidAttribute = errors.New("invalid attribute")
 	ErrInvalidRecord    = errors.New("invalid record type")
 	ErrMissingAttribute = errors.New("missing attribute")
+	ErrDuplicateKey     = errors.New("duplicate key")
 )

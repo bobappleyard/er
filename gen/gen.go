@@ -38,7 +38,7 @@ func (g *generator) out(form string, args ...interface{}) {
 func (g *generator) generateHeader() error {
 	g.out("package %s", g.m.Name)
 	g.out("import (")
-	// g.out("%q", "github.com/bobappleyard/er")
+	g.out("%q", "github.com/bobappleyard/er")
 	g.out("%q", "github.com/bobappleyard/er/rtl")
 	g.out(")")
 	return nil
@@ -49,6 +49,13 @@ func (g *generator) generateModelDecl() error {
 	for _, t := range g.m.Types {
 		g.out("%s %s_Set", goName(t.Name), goName(t.Name))
 	}
+	g.out("}")
+	g.out("func New() *Model{ ")
+	g.out("m := new(Model)")
+	for _, t := range g.m.Types {
+		g.out("m.%s.init(m)", goName(t.Name))
+	}
+	g.out("return m")
 	g.out("}")
 	return nil
 }
@@ -74,9 +81,9 @@ func (g *generator) generateModelIO() error {
 
 func (g *generator) generateModelCRUD() error {
 	g.out("func (m *Model) Validate() error {")
-	for _, t := range g.m.Types {
-		g.out("if err := m.%s.validate(); err != nil { return err }", goName(t.Name))
-	}
+	// for _, t := range g.m.Types {
+	// 	g.out("if err := m.%s.validate(); err != nil { return err }", goName(t.Name))
+	// }
 	g.out("return nil")
 	g.out("}")
 	return nil
@@ -103,14 +110,31 @@ func (g *generator) generateDecls(t *er.EntityType) error {
 	g.out("type %s struct {", goName(t.Name))
 	g.out("model *Model")
 	for _, a := range t.Attributes {
-		g.out("%s %s", goName(a.Name), attrType(a.Type))
+		g.out("%s %s", goName(a.Name), attrType(a))
+	}
+	g.out("}")
+	g.out("")
+	g.out("type %s_Data struct {", privateName(goName(t.Name)))
+	for _, a := range t.Attributes {
+		g.out("%s %s", goName(a.Name), attrType(a))
 	}
 	g.out("}")
 	g.out("")
 	g.out("type %s_Set struct {", goName(t.Name))
 	g.out("model *Model")
+	g.out("rows []%s_Data", privateName(goName(t.Name)))
 	for _, a := range t.Attributes {
 		g.out("%s %s", goName(a.Name), columnType(a))
+	}
+	g.out("}")
+	g.out("func(s *%s_Set) init(m *Model) {", goName(t.Name))
+	g.out("s.model = m")
+	for i, a := range t.Attributes {
+		g.out("s.%s = %s{", goName(a.Name), columnType(a))
+		g.out("ColumnID: %d,", i)
+		g.out("Key: %v,", a.Identifying)
+		g.out("Val: func(idx int) %s { return s.rows[idx].%s},", attrType(a), goName(a.Name))
+		g.out("}")
 	}
 	g.out("}")
 	return nil
@@ -121,55 +145,52 @@ func (g *generator) generateRelations(t *er.EntityType) error {
 }
 
 func (g *generator) generateCRUD(t *er.EntityType) error {
-	g.out("func (s *%s_Set) Insert(e %[1]s) {", goName(t.Name))
+	g.out("func (s *%s_Set) ForEach(f func(%[1]s) error) error {", goName(t.Name))
+	g.out("for _, d := range s.rows {")
+	g.out("if err := f(%s{", goName(t.Name))
+	g.out("model: s.model,")
 	for _, a := range t.Attributes {
-		g.out("s.%s.Insert(e.%[1]s)", goName(a.Name))
+		g.out("%s: d.%[1]s,", goName(a.Name))
 	}
+	g.out("}); err != nil { return err }")
 	g.out("}")
-	g.out("")
-	g.out("func (s *%s_Set) validate() error {", goName(t.Name))
-	g.out("if err := rtl.EnsureUniqueness(")
-	for _, a := range t.Attributes {
-		g.out("&s.%s,", goName(a.Name))
-	}
-	g.out("); err != nil { return err }")
 	g.out("return nil")
 	g.out("}")
 	g.out("")
-	return nil
-}
-
-func (g *generator) generateIO(t *er.EntityType) error {
-	if t.DependsOn != nil {
-		g.out("func (t *%s_Set) parse(p *rsf.Reader, parent *%s) error {", goName(t.Name), goName(t.DependsOn.Target.Name))
-	} else {
-		g.out("func (t *%s_Set) parse(p *rsf.Reader) error {", goName(t.Name))
-	}
-	g.out("var e %s", goName(t.Name))
-	g.out("for p.Next() == rsf.Attribute {")
-	g.out("var err error")
-	g.out("switch p.Name {")
+	g.out("func (s *%s_Set) Insert(e %[1]s) error {", goName(t.Name))
+	g.out("r := s.evalKey(e)")
+	g.out("if r.Next() { return er.ErrDuplicateKey }")
+	g.out("s.rows = append(s.rows, %s_Data{})", privateName(goName(t.Name)))
+	g.out("copy(s.rows[r.This()+1:], s.rows[r.This():])")
+	g.out("s.rows[r.This()] = %s_Data {", privateName(goName(t.Name)))
 	for _, a := range t.Attributes {
-		g.out("case %q:", a.Name)
-		g.out("e.%s, err = %s", goName(a.Name), attrParse(a.Type))
+		g.out("%s: e.%[1]s,", goName(a.Name))
 	}
-	g.out("default:err= er.UnknownAttribute")
-	g.out("}")
-	g.out("if err != nil { return err }")
-	g.out("}")
-	g.out("for p.Next() == rsf.RecordStart {")
-	g.out("var err error")
-	g.out("switch p.Name {")
-	for _, t := range g.dependants(t) {
-		g.out("case %q:", t.Name)
-		g.out("err = m.%s.parse(p, e)", goName(t.Name))
-	}
-	g.out("default:err= er.UnknownEntityType")
-	g.out("}")
-	g.out("if err != nil { return err }")
-	g.out("if p.Next() != rsf.RecordEnd {return er.SyntaxError}")
 	g.out("}")
 	g.out("return nil")
+	// for _, a := range t.Attributes {
+	// 	g.out("s.%s.Insert(e.%[1]s)", goName(a.Name))
+	// }
+	// g.out("}")
+	// g.out("")
+	// g.out("func (s *%s_Set) validate() error {", goName(t.Name))
+	// g.out("if err := rtl.EnsureUniqueness(")
+	// for _, a := range t.Attributes {
+	// 	g.out("&s.%s,", goName(a.Name))
+	// }
+	// g.out("); err != nil { return err }")
+	// g.out("return nil")
+	g.out("}")
+	g.out("")
+	g.out("func (s *%s_Set) evalKey(e %[1]s) *rtl.QueryResult {", goName(t.Name))
+	g.out("var query rtl.Query")
+	for _, a := range t.Attributes {
+		if !a.Identifying {
+			continue
+		}
+		g.out("query = query.And(s.%s.Eq(e.%[1]s))", goName(a.Name))
+	}
+	g.out("return rtl.EvalQuery(query, len(s.rows))")
 	g.out("}")
 	return nil
 }
@@ -196,8 +217,12 @@ func goName(name string) string {
 	return strings.Join(parts, "")
 }
 
-func attrType(t er.AttributeType) string {
-	switch t {
+func privateName(name string) string {
+	return strings.ToLower(name[:1]) + name[1:]
+}
+
+func attrType(a *er.Attribute) string {
+	switch a.Type {
 	case er.IntType:
 		return "int"
 	case er.FloatType:
@@ -220,20 +245,8 @@ func columnType(a *er.Attribute) string {
 	default:
 		return "?"
 	}
-	if a.Identifying {
-		return tn + "Index"
-	}
+	// if a.Identifying {
+	// 	return tn + "Index"
+	// }
 	return tn + "Column"
-}
-
-func attrParse(t er.AttributeType) string {
-	switch t {
-	case er.IntType:
-		return "strconv.Atoi(p.Value)"
-	case er.FloatType:
-		return "strconv.ParseFloat(p.Value)"
-	case er.StringType:
-		return "p.Value, nil"
-	}
-	return "?"
 }
