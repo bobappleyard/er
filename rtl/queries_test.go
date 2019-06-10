@@ -38,6 +38,12 @@ func TestQueryConstruction(t *testing.T) {
 	t.Run("u2", assertClauses(u, 2))
 	t.Run("v2", assertClauses(v, 0, 2))
 	t.Run("s2", assertClauses(s, 0, 1))
+	w := q.Or(u)
+	t.Run("w1", assertClauses(w, 0))
+	if w.alt == nil {
+		t.Error("missing alt")
+	}
+	t.Run("w2", assertClauses(*w.alt, 2))
 }
 
 func TestQueryEvaluation(t *testing.T) {
@@ -53,21 +59,10 @@ func TestQueryEvaluation(t *testing.T) {
 		{2, "Apple", 10},
 		{2, "Cider", 1},
 	}
-	orderID := IntColumn{
-		ColumnID: 0,
-		Key:      true,
-		Val:      func(idx int) int { return rows[idx].orderID },
-	}
-	productID := StringColumn{
-		ColumnID: 0,
-		Key:      true,
-		Val:      func(idx int) string { return rows[idx].productID },
-	}
-	quantity := IntColumn{
-		ColumnID: 0,
-		Key:      false,
-		Val:      func(idx int) int { return rows[idx].quantity },
-	}
+	orderID := IntIndex(0, func(idx int) int { return rows[idx].orderID })
+	productID := StringIndex(1, func(idx int) string { return rows[idx].productID })
+	quantity := IntColumn(2, func(idx int) int { return rows[idx].quantity })
+
 	runQuery := func(q Query) (res []dept) {
 		r := EvalQuery(q, len(rows))
 		for r.Next() {
@@ -105,6 +100,23 @@ func TestQueryEvaluation(t *testing.T) {
 				{2, "Apple", 10},
 			},
 		},
+		{
+			name: "NameOrQuantity",
+			q:    productID.Eq("Apple").Or(quantity.Eq(20)),
+			rows: []dept{
+				{1, "Apple", 10},
+				{1, "Banana", 20},
+				{2, "Apple", 10},
+			},
+		},
+		{
+			name: "AppleOrder1OrQuantity",
+			q:    productID.Eq("Apple").And(orderID.Eq(1)).Or(quantity.Eq(20)),
+			rows: []dept{
+				{1, "Apple", 10},
+				{1, "Banana", 20},
+			},
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			got := runQuery(test.q)
@@ -112,5 +124,16 @@ func TestQueryEvaluation(t *testing.T) {
 				t.Errorf("got %v, expected %v", got, test.rows)
 			}
 		})
+	}
+}
+
+func TestAll(t *testing.T) {
+	q := All(10)
+	i := 0
+	for q.Next() {
+		if q.This() != i {
+			t.Fail()
+		}
+		i++
 	}
 }

@@ -86,6 +86,7 @@ func TestGen(t *testing.T) {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	err = cmd.Run()
-	t.Log(err)
-	t.Fail()
+	if err != nil {
+		t.Error(err)
+	}
 }

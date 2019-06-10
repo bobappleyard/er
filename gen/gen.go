@@ -122,6 +122,7 @@ func (g *generator) generateDecls(t *er.EntityType) error {
 	g.out("")
 	g.out("type %s_Set struct {", goName(t.Name))
 	g.out("model *Model")
+	g.out("query *rtl.Query")
 	g.out("rows []%s_Data", privateName(goName(t.Name)))
 	for _, a := range t.Attributes {
 		g.out("%s %s", goName(a.Name), columnType(a))
@@ -130,11 +131,11 @@ func (g *generator) generateDecls(t *er.EntityType) error {
 	g.out("func(s *%s_Set) init(m *Model) {", goName(t.Name))
 	g.out("s.model = m")
 	for i, a := range t.Attributes {
-		g.out("s.%s = %s{", goName(a.Name), columnType(a))
-		g.out("ColumnID: %d,", i)
-		g.out("Key: %v,", a.Identifying)
-		g.out("Val: func(idx int) %s { return s.rows[idx].%s},", attrType(a), goName(a.Name))
-		g.out("}")
+		init := "Column"
+		if a.Identifying {
+			init = "Index"
+		}
+		g.out("s.%s = %s%s(%d, func(idx int) %s { return s.rows[idx].%[1]s})", goName(a.Name), columnType(a), init, i, attrType(a))
 	}
 	g.out("}")
 	return nil
@@ -146,7 +147,10 @@ func (g *generator) generateRelations(t *er.EntityType) error {
 
 func (g *generator) generateCRUD(t *er.EntityType) error {
 	g.out("func (s *%s_Set) ForEach(f func(%[1]s) error) error {", goName(t.Name))
-	g.out("for _, d := range s.rows {")
+	g.out("q := rtl.All(len(s.rows))")
+	g.out("if s.query != nil { q = rtl.EvalQuery(*s.query, len(s.rows)) }")
+	g.out("for q.Next() {")
+	g.out("d := s.rows[q.This()]")
 	g.out("if err := f(%s{", goName(t.Name))
 	g.out("model: s.model,")
 	for _, a := range t.Attributes {
@@ -157,7 +161,16 @@ func (g *generator) generateCRUD(t *er.EntityType) error {
 	g.out("return nil")
 	g.out("}")
 	g.out("")
+
+	g.out("func (s %s_Set) Where(q rtl.Query) %[1]s_Set {", goName(t.Name))
+	g.out("res := s")
+	g.out("if res.query != nil { q = q.And(*res.query) }")
+	g.out("res.query = &q")
+	g.out("return res")
+	g.out("}")
+
 	g.out("func (s *%s_Set) Insert(e %[1]s) error {", goName(t.Name))
+	g.out("if s.query != nil { return er.ErrImmutableSet }")
 	g.out("r := s.evalKey(e)")
 	g.out("if r.Next() { return er.ErrDuplicateKey }")
 	g.out("s.rows = append(s.rows, %s_Data{})", privateName(goName(t.Name)))
@@ -168,20 +181,32 @@ func (g *generator) generateCRUD(t *er.EntityType) error {
 	}
 	g.out("}")
 	g.out("return nil")
-	// for _, a := range t.Attributes {
-	// 	g.out("s.%s.Insert(e.%[1]s)", goName(a.Name))
-	// }
-	// g.out("}")
-	// g.out("")
-	// g.out("func (s *%s_Set) validate() error {", goName(t.Name))
-	// g.out("if err := rtl.EnsureUniqueness(")
-	// for _, a := range t.Attributes {
-	// 	g.out("&s.%s,", goName(a.Name))
-	// }
-	// g.out("); err != nil { return err }")
-	// g.out("return nil")
 	g.out("}")
 	g.out("")
+
+	g.out("func (s *%s_Set) Update(e %[1]s) error {", goName(t.Name))
+	g.out("if s.query != nil { return er.ErrImmutableSet }")
+	g.out("r := s.evalKey(e)")
+	g.out("if !r.Next() { return er.ErrMissingEntity }")
+	g.out("s.rows[r.This()] = %s_Data {", privateName(goName(t.Name)))
+	for _, a := range t.Attributes {
+		g.out("%s: e.%[1]s,", goName(a.Name))
+	}
+	g.out("}")
+	g.out("return nil")
+	g.out("}")
+	g.out("")
+
+	g.out("func (s *%s_Set) Delete(e %[1]s) error {", goName(t.Name))
+	g.out("if s.query != nil { return er.ErrImmutableSet }")
+	g.out("r := s.evalKey(e)")
+	g.out("if !r.Next() { return er.ErrMissingEntity }")
+	g.out("copy(s.rows[r.This():], s.rows[r.This():+1])")
+	g.out("s.rows = s.rows[:len(s.rows)-1]")
+	g.out("return nil")
+	g.out("}")
+	g.out("")
+
 	g.out("func (s *%s_Set) evalKey(e %[1]s) *rtl.QueryResult {", goName(t.Name))
 	g.out("var query rtl.Query")
 	for _, a := range t.Attributes {
@@ -245,8 +270,5 @@ func columnType(a *er.Attribute) string {
 	default:
 		return "?"
 	}
-	// if a.Identifying {
-	// 	return tn + "Index"
-	// }
-	return tn + "Column"
+	return tn
 }

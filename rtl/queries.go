@@ -2,11 +2,11 @@ package rtl
 
 import (
 	"sort"
-	"strings"
 )
 
 type Query struct {
 	clauses []clause
+	alt     *Query
 }
 
 type QueryResult struct {
@@ -34,65 +34,8 @@ type clause struct {
 
 // Query construction
 
-func (c StringColumn) query(val string, op test) Query {
-	return queryForClause(clause{
-		columnID: c.ColumnID,
-		op:       op,
-		cmp: func(idx int) int {
-			return strings.Compare(c.Val(idx), val)
-		},
-	})
-}
-
-func (c StringColumn) Eq(val string) Query {
-	if c.Key {
-		return c.query(val, key)
-	}
-	return c.query(val, eq)
-}
-
-func (c StringColumn) Lt(val string) Query { return c.query(val, lt) }
-func (c StringColumn) Le(val string) Query { return c.query(val, le) }
-func (c StringColumn) Gt(val string) Query { return c.query(val, gt) }
-func (c StringColumn) Ge(val string) Query { return c.query(val, ge) }
-func (c StringColumn) Ne(val string) Query { return c.query(val, ne) }
-
-func (c StringColumn) Range(from, to string) Query {
-	return c.Ge(from).And(c.Le(to))
-}
-
-func (c IntColumn) query(val int, op test) Query {
-	return queryForClause(clause{
-		columnID: c.ColumnID,
-		op:       op,
-		cmp: func(idx int) int {
-			return c.Val(idx) - val
-		},
-	})
-}
-
-func (c IntColumn) Eq(val int) Query {
-	if c.Key {
-		return c.query(val, key)
-	}
-	return c.query(val, eq)
-}
-
-func (c IntColumn) Lt(val int) Query { return c.query(val, lt) }
-func (c IntColumn) Le(val int) Query { return c.query(val, le) }
-func (c IntColumn) Gt(val int) Query { return c.query(val, gt) }
-func (c IntColumn) Ge(val int) Query { return c.query(val, ge) }
-func (c IntColumn) Ne(val int) Query { return c.query(val, ne) }
-
-func (c IntColumn) Range(from, to int) Query {
-	return c.Ge(from).And(c.Le(to))
-}
-func (c clause) key() bool { return c.op == key }
-
 func queryForClause(c clause) Query {
-	q := Query{}
-	q.clauses = append(q.clauses, c)
-	return q
+	return Query{clauses: []clause{c}}
 }
 
 // Query composition
@@ -101,10 +44,27 @@ func (q Query) And(r Query) Query {
 	var res Query
 	res.clauses = append(res.clauses, q.clauses...)
 	res.clauses = append(res.clauses, r.clauses...)
+	if q.alt != nil {
+		alt := q.alt.And(r)
+		res.alt = &alt
+	}
 	return res
 }
 
+func (q Query) Or(r Query) Query {
+	return Query{
+		clauses: q.clauses,
+		alt:     &r,
+	}
+}
+
 // Query evaluation
+
+func All(n int) *QueryResult {
+	return EvalQuery(queryForClause(clause{
+		cmp: func(int) int { return 0 },
+	}), n)
+}
 
 func EvalQuery(q Query, n int) *QueryResult {
 	res := &QueryResult{0, n, q}
@@ -113,25 +73,41 @@ func EvalQuery(q Query, n int) *QueryResult {
 	return res
 }
 
+func (c clause) key() bool { return c.op == key }
+
 func (r *QueryResult) refineSearchSpace() {
-	clauses := r.q.clauses
-	sort.Slice(clauses, func(i, j int) bool {
-		if clauses[i].key() != clauses[j].key() {
-			return clauses[i].key()
+	this := r.this
+	end := r.end
+	for q := &r.q; q != nil; q = q.alt {
+		min := r.this
+		max := r.end
+		clauses := q.clauses
+		sort.Slice(clauses, func(i, j int) bool {
+			if clauses[i].key() != clauses[j].key() {
+				return clauses[i].key()
+			}
+			return clauses[i].columnID < clauses[j].columnID
+		})
+		for i, c := range clauses {
+			if c.op != key || i != c.columnID {
+				break
+			}
+			min = sort.Search(max-min, func(idx int) bool {
+				return c.cmp(idx+min) >= 0
+			}) + min
+			max = sort.Search(max-min, func(idx int) bool {
+				return c.cmp(idx+min) > 0
+			}) + min
 		}
-		return clauses[i].columnID < clauses[j].columnID
-	})
-	for i, c := range clauses {
-		if c.op != key || i != c.columnID {
-			break
+		if min < this || q == &r.q {
+			this = min
 		}
-		r.this = sort.Search(r.end-r.this, func(idx int) bool {
-			return c.cmp(idx+r.this) >= 0
-		}) + r.this
-		r.end = sort.Search(r.end-r.this, func(idx int) bool {
-			return c.cmp(idx+r.this) > 0
-		}) + r.this
+		if max > end || q == &r.q {
+			end = max
+		}
 	}
+	r.this = this
+	r.end = end
 }
 
 func (r *QueryResult) This() int {
@@ -144,8 +120,10 @@ func (r *QueryResult) Next() bool {
 		if r.this >= r.end {
 			return false
 		}
-		if r.q.matches(r.this) {
-			return true
+		for q := &r.q; q != nil; q = q.alt {
+			if q.matches(r.this) {
+				return true
+			}
 		}
 	}
 }
