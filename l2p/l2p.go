@@ -1,4 +1,4 @@
-package er
+package l2p
 
 import (
 	"github.com/bobappleyard/er"
@@ -38,7 +38,7 @@ func sortRels(m *er.EntityModel) ([]*er.Relationship, error) {
 	return res, nil
 }
 
-func logicalToPhysical(m *er.EntityModel) error {
+func LogicalToPhysical(m *er.EntityModel) error {
 	rs, err := sortRels(m)
 	if err != nil {
 		return err
