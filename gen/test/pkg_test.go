@@ -5,8 +5,11 @@ import (
 )
 
 func TestModelCRUD(t *testing.T) {
-	m := New()
-	assertEntries := func(s C_Set, es []C) func(*testing.T) {
+	type cIter interface {
+		ForEach(func(C) error) error
+	}
+
+	assertEntries := func(s cIter, es []C) func(*testing.T) {
 		return func(t *testing.T) {
 			i := 0
 			s.ForEach(func(c C) error {
@@ -25,6 +28,28 @@ func TestModelCRUD(t *testing.T) {
 			}
 		}
 	}
+
+	assertRels := func(s cIter, fs []D) func(*testing.T) {
+		return func(t *testing.T) {
+			i := 0
+			s.ForEach(func(c C) error {
+				if i < len(fs) {
+					d := c.F()
+					if d.Name != fs[i].Name ||
+						d.ParentName != fs[i].ParentName {
+						t.Errorf("[%d] got %v, expecting %v", i, d, fs[i])
+					}
+				}
+				i++
+				return nil
+			})
+			if i != len(fs) {
+				t.Errorf("got %d entities, expecting %d", i, len(fs))
+			}
+		}
+	}
+
+	m := New()
 
 	m.A.Insert(A{Name: "A1", SName: "B1"})
 	m.B.Insert(B{Name: "B1"})
@@ -56,6 +81,12 @@ func TestModelCRUD(t *testing.T) {
 		{Name: "C1", ParentName: "A1", FName: "D1"},
 		{Name: "C2", ParentName: "A1", FName: "D2"},
 		{Name: "C3", ParentName: "A1", FName: "D2"},
+	}))
+
+	t.Run("Rels", assertRels(m.C, []D{
+		{Name: "D1", ParentName: "B1"},
+		{Name: "D2", ParentName: "B1"},
+		{Name: "D2", ParentName: "B1"},
 	}))
 
 }
