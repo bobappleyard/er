@@ -138,6 +138,7 @@ func (g *generator) generateDecls(t *er.EntityType) error {
 		g.out("s.%s = %s%s(%d, func(idx int) %s { return s.rows[idx].%[1]s})", goName(a.Name), columnType(a), init, i, attrType(a))
 	}
 	g.out("}")
+	g.out("")
 	return nil
 }
 
@@ -168,18 +169,14 @@ func (g *generator) generateCRUD(t *er.EntityType) error {
 	g.out("res.query = &q")
 	g.out("return res")
 	g.out("}")
+	g.out("")
 
 	g.out("func (s *%s_Set) Insert(e %[1]s) error {", goName(t.Name))
 	g.out("if s.query != nil { return er.ErrImmutableSet }")
 	g.out("r := s.evalKey(e)")
 	g.out("if r.Next() { return er.ErrDuplicateKey }")
-	g.out("s.rows = append(s.rows, %s_Data{})", privateName(goName(t.Name)))
-	g.out("copy(s.rows[r.This()+1:], s.rows[r.This():])")
-	g.out("s.rows[r.This()] = %s_Data {", privateName(goName(t.Name)))
-	for _, a := range t.Attributes {
-		g.out("%s: e.%[1]s,", goName(a.Name))
-	}
-	g.out("}")
+	g.out("s.clearSpace(r)")
+	g.out("s.writeRow(r, e)")
 	g.out("return nil")
 	g.out("}")
 	g.out("")
@@ -188,11 +185,16 @@ func (g *generator) generateCRUD(t *er.EntityType) error {
 	g.out("if s.query != nil { return er.ErrImmutableSet }")
 	g.out("r := s.evalKey(e)")
 	g.out("if !r.Next() { return er.ErrMissingEntity }")
-	g.out("s.rows[r.This()] = %s_Data {", privateName(goName(t.Name)))
-	for _, a := range t.Attributes {
-		g.out("%s: e.%[1]s,", goName(a.Name))
-	}
+	g.out("s.writeRow(r, e)")
+	g.out("return nil")
 	g.out("}")
+	g.out("")
+
+	g.out("func (s *%s_Set) Upsert(e %[1]s) error {", goName(t.Name))
+	g.out("if s.query != nil { return er.ErrImmutableSet }")
+	g.out("r := s.evalKey(e)")
+	g.out("if !r.Next() { s.clearSpace(r) }")
+	g.out("s.writeRow(r, e)")
 	g.out("return nil")
 	g.out("}")
 	g.out("")
@@ -217,6 +219,23 @@ func (g *generator) generateCRUD(t *er.EntityType) error {
 	}
 	g.out("return rtl.EvalQuery(query, len(s.rows))")
 	g.out("}")
+	g.out("")
+
+	g.out("func (s *%s_Set) clearSpace(r *rtl.QueryResult) {", goName(t.Name))
+	g.out("s.rows = append(s.rows, %s_Data{})", privateName(goName(t.Name)))
+	g.out("copy(s.rows[r.This()+1:], s.rows[r.This():])")
+	g.out("}")
+	g.out("")
+
+	g.out("func (s *%s_Set) writeRow(r *rtl.QueryResult, e %[1]s) {", goName(t.Name))
+	g.out("s.rows[r.This()] = %s_Data {", privateName(goName(t.Name)))
+	for _, a := range t.Attributes {
+		g.out("%s: e.%[1]s,", goName(a.Name))
+	}
+	g.out("}")
+	g.out("}")
+	g.out("")
+
 	return nil
 }
 

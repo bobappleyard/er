@@ -50,4 +50,12 @@ func TestModelCRUD(t *testing.T) {
 		{Name: "C2", ParentName: "A1", FName: "D2"},
 	}))
 
+	m.C.Upsert(C{Name: "C3", ParentName: "A1", FName: "D1"})
+	m.C.Upsert(C{Name: "C3", ParentName: "A1", FName: "D2"})
+	t.Run("Upsert", assertEntries(m.C, []C{
+		{Name: "C1", ParentName: "A1", FName: "D1"},
+		{Name: "C2", ParentName: "A1", FName: "D2"},
+		{Name: "C3", ParentName: "A1", FName: "D2"},
+	}))
+
 }
