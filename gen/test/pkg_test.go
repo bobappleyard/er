@@ -89,4 +89,12 @@ func TestModelCRUD(t *testing.T) {
 		{Name: "D2", ParentName: "B1"},
 	}))
 
+	if err := m.Validate(); err != nil {
+		t.Error("validation failed on valid model")
+	}
+	m.C.Insert(C{Name: "C4", ParentName: "A1", FName: "D3"})
+	if err := m.Validate(); err == nil {
+		t.Error("validation succeeded on invalid model")
+	}
+
 }

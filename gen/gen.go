@@ -81,9 +81,9 @@ func (g *generator) generateModelIO() error {
 
 func (g *generator) generateModelCRUD() error {
 	g.out("func (m *Model) Validate() error {")
-	// for _, t := range g.m.Types {
-	// 	g.out("if err := m.%s.validate(); err != nil { return err }", goName(t.Name))
-	// }
+	for _, t := range g.m.Types {
+		g.out("if err := m.%s.validate(); err != nil { return err }", goName(t.Name))
+	}
 	g.out("return nil")
 	g.out("}")
 	return nil
@@ -145,14 +145,42 @@ func (g *generator) generateDecls(t *er.EntityType) error {
 }
 
 func (g *generator) generateRelationships(t *er.EntityType) error {
+	g.out("func (s setOf%s) validate() error {", goName(t.Name))
+	if len(t.Relationships) != 0 {
+		g.out("if err := s.ForEach(func(e %s) error {", goName(t.Name))
+		for _, r := range t.Relationships {
+			g.out("{")
+			g.out("q := e.queryFor%s()", goName(r.Name))
+			g.out("if q.Count() != 1 { return er.ErrMissingEntity }")
+			if len(r.Constraints) == 0 {
+				g.out("}")
+				continue
+			}
+			g.out("t := q.ExactlyOne()")
+			for _, c := range r.Constraints {
+				diagonal := make([]string, len(c.Diagonal.Components))
+				for i, m := range c.Diagonal.Components {
+					diagonal[i] = goName(m.Rel.Name) + "()"
+				}
+				riser := make([]string, len(c.Riser.Components))
+				for i, m := range c.Riser.Components {
+					riser[i] = goName(m.Rel.Name) + "()"
+				}
+				g.out("if e.%s != t.%s {", strings.Join(diagonal, "."), strings.Join(riser, "."))
+				g.out("return er.ErrMissingEntity")
+				g.out("}")
+			}
+			g.out("}")
+		}
+		g.out("return nil")
+		g.out("}); err != nil { return err }")
+	}
+	g.out("return nil")
+	g.out("}")
+	g.out("")
 	for _, r := range t.Relationships {
 		g.out("func (e %s) %s() %s {", goName(t.Name), goName(r.Name), goName(r.Target.Name))
-		g.out("var res %s", goName(r.Target.Name))
-		g.out("e.queryFor%s().ForEach(func(t %s) error {", goName(r.Name), goName(r.Target.Name))
-		g.out("res = t")
-		g.out("return nil")
-		g.out("})")
-		g.out("return res")
+		g.out("return e.queryFor%s().ExactlyOne()", goName(r.Name))
 		g.out("}")
 		g.out("")
 
@@ -189,6 +217,24 @@ func (g *generator) generateCRUD(t *er.EntityType) error {
 	g.out("return nil")
 	g.out("}")
 	g.out("")
+
+	g.out("func (s setOf%s) Count() int {", goName(t.Name))
+	g.out("c := 0")
+	g.out("s.ForEach(func(%s) error {", goName(t.Name))
+	g.out("c++")
+	g.out("return nil")
+	g.out("})")
+	g.out("return c")
+	g.out("}")
+
+	g.out("func (s setOf%s) ExactlyOne() %[1]s {", goName(t.Name))
+	g.out("var res %s", goName(t.Name))
+	g.out("s.ForEach(func(t %s) error {", goName(t.Name))
+	g.out("res = t")
+	g.out("return nil")
+	g.out("})")
+	g.out("return res")
+	g.out("}")
 
 	g.out("func (s setOf%s) Where(q rtl.Query) setOf%[1]s {", goName(t.Name))
 	g.out("res := s")
