@@ -94,4 +94,5 @@ var (
 	ErrDuplicateKey     = errors.New("duplicate key")
 	ErrMissingEntity    = errors.New("entity not found by key")
 	ErrImmutableSet     = errors.New("attempting to modify immutable set")
+	ErrBadSyntax        = errors.New("syntax error")
 )

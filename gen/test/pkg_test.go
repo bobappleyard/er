@@ -4,30 +4,11 @@ import (
 	"testing"
 )
 
-func TestModelCRUD(t *testing.T) {
-	type cIter interface {
-		ForEach(func(C) error) error
-	}
+type cIter interface {
+	ForEach(func(C) error) error
+}
 
-	assertEntries := func(s cIter, es []C) func(*testing.T) {
-		return func(t *testing.T) {
-			i := 0
-			s.ForEach(func(c C) error {
-				if i < len(es) {
-					if c.Name != es[i].Name ||
-						c.ParentName != es[i].ParentName ||
-						c.FName != es[i].FName {
-						t.Errorf("[%d] got %v, expecting %v", i, c, es[i])
-					}
-				}
-				i++
-				return nil
-			})
-			if i != len(es) {
-				t.Errorf("got %d entities, expecting %d", i, len(es))
-			}
-		}
-	}
+func TestModelCRUD(t *testing.T) {
 
 	assertRels := func(s cIter, fs []D) func(*testing.T) {
 		return func(t *testing.T) {
@@ -97,4 +78,55 @@ func TestModelCRUD(t *testing.T) {
 		t.Error("validation succeeded on invalid model")
 	}
 
+}
+
+func TestModelParse(t *testing.T) {
+	m := New()
+	err := m.Unmarshal([]byte(`
+	a {
+		name: "A1"
+		s_name: "B1"
+
+		c {
+			name: "C1"
+			f_name: "D1"
+		}
+	}
+
+	b {
+		name: "B1"
+
+		d {
+			name: "D1"
+		}
+	}
+	`))
+	if err != nil {
+		t.Errorf("parse failed: %v", err)
+	}
+	err = m.Validate()
+	if err != nil {
+		t.Errorf("validation failed: %v", err)
+	}
+	assertEntries(m.C, []C{{Name: "C1", ParentName: "A1", FName: "D1"}})
+}
+
+func assertEntries(s cIter, es []C) func(*testing.T) {
+	return func(t *testing.T) {
+		i := 0
+		s.ForEach(func(c C) error {
+			if i < len(es) {
+				if c.Name != es[i].Name ||
+					c.ParentName != es[i].ParentName ||
+					c.FName != es[i].FName {
+					t.Errorf("[%d] got %v, expecting %v", i, c, es[i])
+				}
+			}
+			i++
+			return nil
+		})
+		if i != len(es) {
+			t.Errorf("got %d entities, expecting %d", i, len(es))
+		}
+	}
 }

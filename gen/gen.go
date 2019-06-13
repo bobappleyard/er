@@ -16,7 +16,7 @@ func generate(m *er.EntityModel) ([]byte, error) {
 		g.generateHeader,
 		g.generateModelDecl,
 		g.generateModelCRUD,
-		// g.generateModelIO,
+		g.generateModelIO,
 		g.generateEntities,
 	} {
 		if err := action(); err != nil {
@@ -63,18 +63,15 @@ func (g *generator) generateModelDecl() error {
 func (g *generator) generateModelIO() error {
 	g.out("func (m *Model) Unmarshal(bs []byte) error {")
 	g.out("p := rtl.NewReader(bs)")
-	g.out("for p.Next() == rsf.RecordStart {")
-	g.out("switch p.Name {")
+	g.out("for p.Next() {")
+	g.out("switch p.Name() {")
 	for _, t := range g.dependants(nil) {
 		g.out("case %q:", t.Name)
-		g.out("if err := m.%s.parse(p); err != nil {return err}", goName(t.Name))
+		g.out("m.%s.parse(p.Record())", goName(t.Name))
 	}
-	g.out("default:return er.UnknownEntityType")
-	g.out("}")
-	g.out("if p.Next() != rsf.RecordEnd {return er.SyntaxError}")
-	g.out("}")
-	g.out("if p.Next() != rsf.EOF {return er.SyntaxError}")
-	g.out("return nil")
+	g.out("}}")
+	g.out("p.ExpectEOF()")
+	g.out("return p.Err()")
 	g.out("}")
 	return nil
 }
@@ -96,7 +93,7 @@ func (g *generator) generateEntities() error {
 			g.generateDecls,
 			g.generateRelationships,
 			g.generateCRUD,
-			// g.generateIO,
+			g.generateIO,
 		} {
 			if err := action(t); err != nil {
 				return err
@@ -312,6 +309,36 @@ func (g *generator) generateCRUD(t *er.EntityType) error {
 	return nil
 }
 
+func (g *generator) generateIO(t *er.EntityType) error {
+	omit := map[string]bool{}
+	if t.DependsOn != nil {
+		parent := t.DependsOn.Target
+		g.out("func (s *setOf%s) parse(p *rtl.Reader, parent %s) {", goName(t.Name), goName(parent.Name))
+		g.out("var e %s", goName(t.Name))
+		for _, k := range t.DependsOn.Implementation {
+			g.out("e.%s = parent.%s", goName(k.Source.Name), goName(k.Target.Name))
+			omit[k.Source.Name] = true
+		}
+	} else {
+		g.out("func (s *setOf%s) parse(p *rtl.Reader) {", goName(t.Name))
+		g.out("var e %s", goName(t.Name))
+	}
+	g.out("for p.Next() { switch p.Name() {")
+	for _, a := range t.Attributes {
+		if omit[a.Name] {
+			continue
+		}
+		g.out("case %q: e.%s = p.%s()", a.Name, goName(a.Name), attrParse(a))
+	}
+	for _, d := range g.dependants(t) {
+		g.out("case %q: s.model.%s.parse(p.Record(), e)", d.Name, goName(d.Name))
+	}
+	g.out("}}")
+	g.out("if p.Err() == nil { p.SetErr(s.Insert(e)) }")
+	g.out("}")
+	return nil
+}
+
 func (g *generator) dependants(t *er.EntityType) []*er.EntityType {
 	var res []*er.EntityType
 	for _, u := range g.m.Types {
@@ -355,6 +382,21 @@ func columnType(a *er.Attribute) string {
 		tn = "rtl.Float64"
 	case er.StringType:
 		tn = "rtl.String"
+	default:
+		return "?"
+	}
+	return tn
+}
+
+func attrParse(a *er.Attribute) string {
+	var tn string
+	switch a.Type {
+	case er.IntType:
+		tn = "IntAttr"
+	case er.FloatType:
+		tn = "FloatAttr"
+	case er.StringType:
+		tn = "StringAttr"
 	default:
 		return "?"
 	}
