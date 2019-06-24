@@ -16,7 +16,7 @@ type EntityType struct {
 	Name          string          `rsf:"name"`
 	Attributes    []*Attribute    `rsf:"attribute"`
 	Relationships []*Relationship `rsf:"relationship"`
-	DependsOn     *Relationship
+	Dependency    Dependency
 }
 
 // Attribute represents an attribute.
@@ -46,6 +46,11 @@ type Relationship struct {
 	Identifying    bool             `rsf:"identifying"`
 	Implementation []Implementation `rsf:"implementation"`
 	Source, Target *EntityType
+}
+
+type Dependency struct {
+	Rel      *Relationship
+	Sequence bool
 }
 
 // Constraint represnts a constraint over a relationship.

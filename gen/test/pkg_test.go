@@ -74,6 +74,7 @@ func TestModelCRUD(t *testing.T) {
 		t.Error("validation failed on valid model")
 	}
 	m.C.Insert(C{Name: "C4", ParentName: "A1", FName: "D3"})
+	t.Log(m.C)
 	if err := m.Validate(); err == nil {
 		t.Error("validation succeeded on invalid model")
 	}
@@ -108,7 +109,7 @@ func TestModelParse(t *testing.T) {
 	if err != nil {
 		t.Errorf("validation failed: %v", err)
 	}
-	assertEntries(m.C, []C{{Name: "C1", ParentName: "A1", FName: "D1"}})
+	t.Run("Check", assertEntries(m.C, []C{{Name: "C1", ParentName: "A1", FName: "D1"}}))
 }
 
 func assertEntries(s cIter, es []C) func(*testing.T) {

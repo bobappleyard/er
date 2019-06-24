@@ -72,8 +72,8 @@ func TestGen(t *testing.T) {
 			}},
 		},
 	}
-	c.DependsOn = c.Relationships[0]
-	d.DependsOn = d.Relationships[0]
+	c.Dependency = Dependency{Rel: c.Relationships[0], Sequence: true}
+	d.Dependency = Dependency{Rel: d.Relationships[0]}
 
 	l2p.LogicalToPhysical(m)
 	bs, err := generate(m)

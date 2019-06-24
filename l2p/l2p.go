@@ -50,6 +50,15 @@ func LogicalToPhysical(m *er.EntityModel) error {
 		if err := (&relationshipImplementation{r: r}).create(); err != nil {
 			return err
 		}
+		t := r.Source
+		if t.Dependency.Rel == r && t.Dependency.Sequence {
+			t.Attributes = append(t.Attributes, &er.Attribute{
+				Name:        "seq",
+				Type:        er.IntType,
+				Identifying: r.Identifying,
+				Owner:       t,
+			})
+		}
 	}
 	return nil
 }

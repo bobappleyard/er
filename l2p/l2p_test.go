@@ -507,6 +507,126 @@ func TestTriangleTwin(t *testing.T) {
 	testAttrs(t, m.Types[1].Attributes, []string{"name", "parent_name", "f_name"})
 }
 
+func TestSequence(t *testing.T) {
+	m := EntityModel{
+		Types: []*EntityType{
+			{Name: "a"},
+			{Name: "b"},
+			{Name: "c"},
+		},
+	}
+	a := m.Types[0]
+	b := m.Types[1]
+	c := m.Types[2]
+	for _, t := range m.Types {
+		t.Attributes = []*Attribute{
+			{
+				Owner:       t,
+				Name:        "name",
+				Type:        StringType,
+				Identifying: true,
+			},
+		}
+	}
+	b.Relationships = []*Relationship{
+		{
+			Name:   "parent",
+			Source: b,
+			Target: a,
+		},
+		{
+			Name:   "f",
+			Source: b,
+			Target: c,
+		},
+	}
+	c.Relationships = []*Relationship{
+		{
+			Name:        "parent",
+			Source:      c,
+			Target:      a,
+			Identifying: true,
+		},
+	}
+	b.Relationships[1].Constraints = []Constraint{
+		{
+			Diagonal{Components: []Component{
+				{Rel: b.Relationships[0]},
+			}},
+			Riser{[]Component{
+				{Rel: c.Relationships[0]},
+			}},
+		},
+	}
+	b.Dependency = Dependency{
+		Rel:      b.Relationships[0],
+		Sequence: true,
+	}
+
+	LogicalToPhysical(&m)
+	testAttrs(t, m.Types[1].Attributes, []string{"name", "parent_name", "f_name", "seq"})
+}
+
+func TestSequenceKey(t *testing.T) {
+	m := EntityModel{
+		Types: []*EntityType{
+			{Name: "a"},
+			{Name: "b"},
+			{Name: "c"},
+		},
+	}
+	a := m.Types[0]
+	b := m.Types[1]
+	c := m.Types[2]
+	for _, t := range m.Types {
+		t.Attributes = []*Attribute{
+			{
+				Owner:       t,
+				Name:        "name",
+				Type:        StringType,
+				Identifying: true,
+			},
+		}
+	}
+	b.Relationships = []*Relationship{
+		{
+			Name:   "parent",
+			Source: b,
+			Target: a,
+		},
+		{
+			Name:   "f",
+			Source: b,
+			Target: c,
+		},
+	}
+	c.Relationships = []*Relationship{
+		{
+			Name:        "parent",
+			Source:      c,
+			Target:      a,
+			Identifying: true,
+		},
+	}
+	b.Relationships[1].Constraints = []Constraint{
+		{
+			Diagonal{Components: []Component{
+				{Rel: b.Relationships[0]},
+			}},
+			Riser{[]Component{
+				{Rel: c.Relationships[0]},
+			}},
+		},
+	}
+	c.Dependency = Dependency{
+		Rel:      c.Relationships[0],
+		Sequence: true,
+	}
+
+	LogicalToPhysical(&m)
+	testAttrs(t, m.Types[1].Attributes, []string{"f_name", "f_seq", "name", "parent_name"})
+}
+
 func testAttrs(t *testing.T, attrs []*Attribute, names []string) {
 	var anames []string
 	for _, a := range attrs {
