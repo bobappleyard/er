@@ -1,0 +1,239 @@
+package {{ .Name }}
+
+import (
+    "github.com/bobappleyard/er"
+    "github.com/bobappleyard/er/rtl"
+)
+
+type Model struct {
+    {{range .Types}}
+    {{goName .Name}} setOf{{goName .Name -}}
+    {{end}}
+}
+
+func New() *Model {
+    m := new(Model)
+    {{range .Types}}m.{{goName .Name}}.init(m)
+    {{end -}}
+    return m
+}
+
+func (m *Model) Validate() error {
+    {{range .Types}}if err := m.{{goName .Name}}.validate(); err != nil { return err}
+    {{end -}}
+    return nil
+}
+
+func (m *Model) Unmarshal(bs []byte) error {
+    p := rtl.NewReader(bs)
+    for p.Next() {
+        switch p.Name() {
+        {{range dependants nil}}
+        case {{printf "%q" .Name}}:
+            m.{{goName .Name}}.parse(p.Record())
+        {{end}}
+        default:
+            p.SetErr(er.ErrInvalidRecord)
+        }
+    }
+    return p.Err()
+}
+
+{{range .Types}}
+
+type {{goName .Name}} struct {
+    {{range .Attributes}}{{goName .Name}} {{attrType .}}
+    {{end -}}
+    model *Model
+}
+
+type attrsOf{{goName .Name}} struct {
+    {{range .Attributes}}{{goName .Name}} {{attrType .}}
+    {{end -}}
+}
+
+type setOf{{goName .Name}} struct {
+    {{range .Attributes}}{{goName .Name}} {{columnType .}}
+    {{end -}}
+
+    model *Model
+    query *rtl.Query
+    rows []attrsOf{{goName .Name}}
+}
+
+func (s *setOf{{goName .Name}}) init(m *Model) {
+    s.model = m
+    {{range $i, $e := .Attributes}}
+    s.{{goName .Name}} = {{columnInit .}}({{$i}}, func(idx int) {{attrType .}} {
+        return s.rows[idx].{{goName .Name}}
+    })
+    {{end}}
+}
+
+func (s *setOf{{goName .Name}}) validate() error {
+    {{if ne (len .Relationships) 0}}
+    return s.ForEach(func(e {{goName .Name}}) error {
+        {{- range .Relationships}}
+        {
+            q := e.queryFor{{goName .Name}}()
+            if q.Count() != 1 {
+                return er.ErrMissingEntity
+            }{{if ne (len .Constraints) 0}}
+            t := q.ExactlyOne()
+            {{- range .Constraints}}
+            if e{{range .Diagonal.Components}}.{{goName .Rel.Name}}(){{end}} != t{{range .Riser.Components}}.{{goName .Rel.Name}}(){{end}} {
+                return er.ErrMissingEntity
+            }{{end}}{{end}}
+        }{{end}}
+        return nil
+    })
+    {{else}}
+    return nil
+    {{end}}
+}
+
+{{if .Dependency.Rel}}
+func (s *setOf{{goName .Name}}) parse(p *rtl.Reader, parent {{goName .Dependency.Rel.Target.Name}}) {
+    var e {{goName .Name}}
+    {{range .Dependency.Rel.Implementation}}
+        e.{{goName .Source.Name}} = parent.{{goName .Target.Name}}
+    {{end}}
+{{else}}
+func (s *setOf{{goName .Name}}) parse(p *rtl.Reader) {
+    var e {{goName .Name}}
+{{end}}
+    for p.Next() {
+        switch p.Name() {
+        {{range newAttrs .}}
+        case {{printf "%q" .Name}}:
+            e.{{goName .Name}} = p.{{attrParse .}}()
+        {{end}}
+        {{range dependants .}}
+        case {{printf "%q" .Name}}:
+            s.model.{{goName .Name}}.parse(p.Record(), e)
+        {{end}}
+        default:
+            p.SetErr(er.ErrInvalidRecord)
+        }
+    }
+    if p.Err() == nil {
+        p.SetErr(s.Insert(e))
+    }
+}
+
+{{range .Relationships}}
+
+func (e {{goName .Source.Name}}) {{goName .Name}}() {{goName .Target.Name}} {
+    q := e.queryFor{{goName .Name}}()
+    return q.ExactlyOne()
+}
+
+func (e {{goName .Source.Name}}) queryFor{{goName .Name}}() setOf{{goName .Target.Name}} {
+    var q rtl.Query
+    {{with $rel := .}}
+    {{range $rel.Implementation}}
+    q = q.And(e.model.{{goName $rel.Target.Name}}.{{goName .Target.Name}}.Eq(e.
+        {{- range .BasePath}}{{goName .Rel.Name}}().{{end -}}{{goName .Source.Name -}}
+    ))
+    {{end}}
+    {{end}}
+    return e.model.{{goName .Target.Name}}.Where(q)
+}
+
+{{end}}
+
+func (s setOf{{goName .Name}}) ForEach(f func({{goName .Name}}) error) error {
+    q := rtl.All(len(s.rows))
+    if s.query != nil { q = rtl.EvalQuery(*s.query, len(s.rows)) }
+    for q.Next() {
+        d := s.rows[q.This()]
+        if err := f({{goName .Name}}{
+            model: s.model,
+            {{range .Attributes}}
+            {{goName .Name}}: d.{{goName .Name}},
+            {{end}}
+        }); err != nil { return err }
+    }
+    return nil
+}
+
+func (s setOf{{goName .Name}}) Count() int {
+    c := 0
+    s.ForEach(func({{goName .Name}}) error {
+        c++
+        return nil
+    })
+    return c
+}
+
+func (s setOf{{goName .Name}}) ExactlyOne() {{goName .Name}} {
+    var res {{goName .Name}}
+    s.ForEach(func(t {{goName .Name}}) error {
+        res = t
+        return nil
+    })
+    return res
+}
+
+func (s setOf{{goName .Name}}) Where(q rtl.Query) setOf{{goName .Name}} {
+    res := s
+    if res.query != nil { q = q.And(*res.query) }
+    res.query = &q
+    return res
+}
+
+func (s *setOf{{goName .Name}}) Insert(e {{goName .Name}}) error {
+    if s.query != nil { return er.ErrImmutableSet }
+    r := s.evalKey(e)
+    if r.Next() { return er.ErrDuplicateKey }
+    s.clearSpace(r)
+    s.writeRow(r, e)
+    return nil
+}
+
+func (s *setOf{{goName .Name}}) Update(e {{goName .Name}}) error {
+    if s.query != nil { return er.ErrImmutableSet }
+    r := s.evalKey(e)
+    if !r.Next() { return er.ErrMissingEntity }
+    s.writeRow(r, e)
+    return nil
+}
+
+func (s *setOf{{goName .Name}}) Upsert(e {{goName .Name}}) error {
+    if s.query != nil { return er.ErrImmutableSet }
+    r := s.evalKey(e)
+    if !r.Next() { s.clearSpace(r) }
+    s.writeRow(r, e)
+    return nil
+}
+
+func (s *setOf{{goName .Name}}) Delete(e {{goName .Name}}) error {
+    if s.query != nil { return er.ErrImmutableSet }
+    r := s.evalKey(e)
+    if !r.Next() { return er.ErrMissingEntity }
+    copy(s.rows[r.This():], s.rows[r.This():+1])
+    s.rows = s.rows[:len(s.rows)-1]
+    return nil
+}
+
+func (s setOf{{goName .Name}}) evalKey(e {{goName .Name}}) *rtl.QueryResult {
+    var query rtl.Query
+    {{range .Attributes}}{{if .Identifying}}query = query.And(s.{{goName .Name}}.Eq(e.{{goName .Name}}))
+    {{end}}{{end -}}
+    return rtl.EvalQuery(query, len(s.rows))
+}
+
+func (s *setOf{{goName .Name}}) clearSpace(r *rtl.QueryResult) {
+    s.rows = append(s.rows, attrsOf{{goName .Name}}{})
+    copy(s.rows[r.This()+1:], s.rows[r.This():])
+}
+
+func (s *setOf{{goName .Name}}) writeRow(r *rtl.QueryResult, e {{goName .Name}}) {
+    s.rows[r.This()] = attrsOf{{goName .Name}} {
+    {{range .Attributes}}
+        {{goName .Name}}: e.{{goName .Name}},
+    {{end}}
+    }
+}
+
+{{end}}
