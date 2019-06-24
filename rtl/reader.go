@@ -9,11 +9,12 @@ import (
 )
 
 type Reader struct {
-	parent *Reader
-	src    []byte
-	pos    int
-	name   string
-	err    error
+	parent  *Reader
+	src     []byte
+	pos     int
+	attrsOK bool
+	name    string
+	err     error
 }
 
 func NewReader(src []byte) *Reader {
@@ -27,6 +28,7 @@ func (p *Reader) Next() bool {
 	if p.parent != nil {
 		if p.readChar() == '}' {
 			p.parent.pos = p.pos
+			p.parent.attrsOK = false
 			return false
 		}
 		p.unreadChar()
@@ -65,26 +67,23 @@ func (p *Reader) Record() *Reader {
 		return nil
 	}
 	return &Reader{
-		parent: p,
-		src:    p.src,
-		pos:    p.pos,
+		parent:  p,
+		src:     p.src,
+		pos:     p.pos,
+		attrsOK: true,
 	}
 }
 
 func (p *Reader) StringAttr() string {
-	if !p.skipSpace() {
-		p.SetErr(er.ErrBadSyntax)
-		return ""
-	}
-	if p.readChar() != ':' {
-		p.SetErr(er.ErrBadSyntax)
-		return ""
-	}
-	if !p.skipSpace() {
-		p.SetErr(er.ErrBadSyntax)
-		return ""
-	}
 	res, err := strconv.Unquote(p.parseAttr())
+	if err != nil {
+		p.SetErr(err)
+	}
+	return res
+}
+
+func (p *Reader) IntAttr() int {
+	res, err := strconv.Atoi(p.parseAttr())
 	if err != nil {
 		p.SetErr(err)
 	}
@@ -148,6 +147,22 @@ func (p *Reader) parseName() bool {
 }
 
 func (p *Reader) parseAttr() string {
+	if !p.attrsOK {
+		p.SetErr(er.ErrBadSyntax)
+		return ""
+	}
+	if !p.skipSpace() {
+		p.SetErr(er.ErrBadSyntax)
+		return ""
+	}
+	if p.readChar() != ':' {
+		p.SetErr(er.ErrBadSyntax)
+		return ""
+	}
+	if !p.skipSpace() {
+		p.SetErr(er.ErrBadSyntax)
+		return ""
+	}
 	attrStart := p.pos
 	if p.readChar() != '"' {
 		p.SetErr(er.ErrBadSyntax)

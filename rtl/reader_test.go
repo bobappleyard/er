@@ -9,29 +9,29 @@ func TestReaderNext(t *testing.T) {
 		name, in, out string
 		success       bool
 	}{
-		// {
-		// 	name:    "Empty",
-		// 	in:      "",
-		// 	success: false,
-		// },
-		// {
-		// 	name:    "GoodInput",
-		// 	in:      "name ",
-		// 	out:     "name",
-		// 	success: true,
-		// },
-		// {
-		// 	name:    "Attr",
-		// 	in:      "name:",
-		// 	out:     "name",
-		// 	success: true,
-		// },
-		// {
-		// 	name:    "Rec",
-		// 	in:      "name{",
-		// 	out:     "name",
-		// 	success: true,
-		// },
+		{
+			name:    "Empty",
+			in:      "",
+			success: false,
+		},
+		{
+			name:    "GoodInput",
+			in:      "name ",
+			out:     "name",
+			success: true,
+		},
+		{
+			name:    "Attr",
+			in:      "name:",
+			out:     "name",
+			success: true,
+		},
+		{
+			name:    "Rec",
+			in:      "name{",
+			out:     "name",
+			success: true,
+		},
 		{
 			name:    "LeadingSpace",
 			in:      "  name{",
@@ -59,7 +59,8 @@ func TestReaderNext(t *testing.T) {
 }
 
 func TestParseAttr(t *testing.T) {
-	p := NewReader([]byte(`"value"`))
+	p := NewReader([]byte(`:"value"`))
+	p.attrsOK = true
 	value := p.parseAttr()
 	if value != `"value"` {
 		t.Log(value)
