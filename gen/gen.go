@@ -61,6 +61,8 @@ func attrType(a *er.Attribute) string {
 		return "float64"
 	case er.StringType:
 		return "string"
+	case er.BoolType:
+		return "bool"
 	}
 	return "?"
 }
@@ -74,6 +76,8 @@ func columnType(a *er.Attribute) string {
 		tn = "rtl.Float64"
 	case er.StringType:
 		tn = "rtl.String"
+	case er.BoolType:
+		tn = "rtl.Bool"
 	default:
 		return "?"
 	}
@@ -97,6 +101,8 @@ func attrParse(a *er.Attribute) string {
 		tn = "FloatAttr"
 	case er.StringType:
 		tn = "StringAttr"
+	case er.BoolType:
+		tn = "BoolAttr"
 	default:
 		return "?"
 	}

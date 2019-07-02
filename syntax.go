@@ -36,6 +36,7 @@ const (
 	StringType
 	IntType
 	FloatType
+	BoolType
 )
 
 // Relationship represents a relationship.

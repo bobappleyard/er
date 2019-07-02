@@ -83,7 +83,23 @@ func (p *Reader) StringAttr() string {
 }
 
 func (p *Reader) IntAttr() int {
-	res, err := strconv.Atoi(p.parseAttr())
+	attr := p.parseAttr()
+	if p.err != nil {
+		return 0
+	}
+	res, err := strconv.Atoi(attr[1 : len(attr)-1])
+	if err != nil {
+		p.SetErr(err)
+	}
+	return res
+}
+
+func (p *Reader) BoolAttr() bool {
+	attr := p.parseAttr()
+	if p.err != nil {
+		return false
+	}
+	res, err := strconv.ParseBool(attr[1 : len(attr)-1])
 	if err != nil {
 		p.SetErr(err)
 	}

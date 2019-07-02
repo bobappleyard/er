@@ -52,18 +52,22 @@ func (q Query) And(r Query) Query {
 }
 
 func (q Query) Or(r Query) Query {
-	return Query{
-		clauses: q.clauses,
-		alt:     &r,
+	tail := &q
+	for tail.alt != nil {
+		tail = tail.alt
 	}
+	tail.alt = &r
+	return q
 }
 
 // Query evaluation
 
-func All(n int) *QueryResult {
-	return EvalQuery(queryForClause(clause{
-		cmp: func(int) int { return 0 },
-	}), n)
+func All() Query {
+	return queryForClause(clause{cmp: func(int) int { return 0 }})
+}
+
+func None() Query {
+	return queryForClause(clause{op: ne, cmp: func(int) int { return 0 }})
 }
 
 func EvalQuery(q Query, n int) *QueryResult {

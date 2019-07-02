@@ -85,3 +85,51 @@ func (c Int) Ne(val int) Query { return c.query(val, ne) }
 func (c Int) Range(from, to int) Query {
 	return c.Ge(from).And(c.Le(to))
 }
+
+type Bool struct {
+	columnID int
+	key      bool
+	val      func(idx int) bool
+}
+
+func BoolColumn(id int, val func(int) bool) Bool {
+	return Bool{columnID: id, val: val}
+}
+
+func BoolIndex(id int, val func(int) bool) Bool {
+	return Bool{columnID: id, key: true, val: val}
+}
+
+func (c Bool) query(val bool, op test) Query {
+	return queryForClause(clause{
+		columnID: c.columnID,
+		op:       op,
+		cmp: func(idx int) int {
+			candidate := c.val(idx)
+			if val == candidate {
+				return 0
+			}
+			if val {
+				return 1
+			}
+			return -1
+		},
+	})
+}
+
+func (c Bool) Eq(val bool) Query {
+	if c.key {
+		return c.query(val, key)
+	}
+	return c.query(val, eq)
+}
+
+func (c Bool) Lt(val bool) Query { return c.query(val, lt) }
+func (c Bool) Le(val bool) Query { return c.query(val, le) }
+func (c Bool) Gt(val bool) Query { return c.query(val, gt) }
+func (c Bool) Ge(val bool) Query { return c.query(val, ge) }
+func (c Bool) Ne(val bool) Query { return c.query(val, ne) }
+
+func (c Bool) Range(from, to bool) Query {
+	return c.Ge(from).And(c.Le(to))
+}

@@ -56,17 +56,8 @@ func TestModelCRUD(t *testing.T) {
 		{Name: "C2", ParentName: "A1", FName: "D2"},
 	}))
 
-	m.C.Upsert(C{Name: "C3", ParentName: "A1", FName: "D1"})
-	m.C.Upsert(C{Name: "C3", ParentName: "A1", FName: "D2"})
-	t.Run("Upsert", assertEntries(m.C, []C{
-		{Name: "C1", ParentName: "A1", FName: "D1"},
-		{Name: "C2", ParentName: "A1", FName: "D2"},
-		{Name: "C3", ParentName: "A1", FName: "D2"},
-	}))
-
 	t.Run("Rels", assertRels(m.C, []D{
 		{Name: "D1", ParentName: "B1"},
-		{Name: "D2", ParentName: "B1"},
 		{Name: "D2", ParentName: "B1"},
 	}))
 
@@ -74,7 +65,6 @@ func TestModelCRUD(t *testing.T) {
 		t.Error("validation failed on valid model")
 	}
 	m.C.Insert(C{Name: "C4", ParentName: "A1", FName: "D3"})
-	t.Log(m.C)
 	if err := m.Validate(); err == nil {
 		t.Error("validation succeeded on invalid model")
 	}

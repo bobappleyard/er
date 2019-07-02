@@ -7,7 +7,7 @@ import (
 
 type Model struct {
     {{range .Types}}
-    {{goName .Name}} setOf{{goName .Name -}}
+    {{goName .Name}} tableOf{{goName .Name}}
     {{end}}
 }
 
@@ -57,12 +57,17 @@ type setOf{{goName .Name}} struct {
     {{end -}}
 
     model *Model
-    query *rtl.Query
+    query rtl.Query
     rows []attrsOf{{goName .Name}}
 }
 
-func (s *setOf{{goName .Name}}) init(m *Model) {
+type tableOf{{goName .Name}} struct {
+    setOf{{goName .Name}}
+}
+
+func (s *tableOf{{goName .Name}}) init(m *Model) {
     s.model = m
+    s.query = rtl.All()
     {{range $i, $e := .Attributes}}
     s.{{goName .Name}} = {{columnInit .}}({{$i}}, func(idx int) {{attrType .}} {
         return s.rows[idx].{{goName .Name}}
@@ -70,7 +75,7 @@ func (s *setOf{{goName .Name}}) init(m *Model) {
     {{end}}
 }
 
-func (s *setOf{{goName .Name}}) validate() error {
+func (s *tableOf{{goName .Name}}) validate() error {
     {{if ne (len .Relationships) 0}}
     return s.ForEach(func(e {{goName .Name}}) error {
         {{- range .Relationships}}
@@ -79,7 +84,7 @@ func (s *setOf{{goName .Name}}) validate() error {
             if q.Count() != 1 {
                 return er.ErrMissingEntity
             }{{if ne (len .Constraints) 0}}
-            t := q.ExactlyOne()
+            t := q.One()
             {{- range .Constraints}}
             if e{{range .Diagonal.Components}}.{{goName .Rel.Name}}(){{end}} != t{{range .Riser.Components}}.{{goName .Rel.Name}}(){{end}} {
                 return er.ErrMissingEntity
@@ -93,25 +98,34 @@ func (s *setOf{{goName .Name}}) validate() error {
 }
 
 {{if .Dependency.Rel}}
-func (s *setOf{{goName .Name}}) parse(p *rtl.Reader, parent {{goName .Dependency.Rel.Target.Name}}) {
-    var e {{goName .Name}}
-    {{range .Dependency.Rel.Implementation}}
-        e.{{goName .Source.Name}} = parent.{{goName .Target.Name}}
-    {{end}}
+{{- if .Dependency.Sequence}}
+func (s *tableOf{{goName .Name}}) parse(p *rtl.Reader, parent {{goName .Dependency.Rel.Target.Name}}, seq int) {
 {{else}}
-func (s *setOf{{goName .Name}}) parse(p *rtl.Reader) {
+func (s *tableOf{{goName .Name}}) parse(p *rtl.Reader, parent {{goName .Dependency.Rel.Target.Name}}) {
+{{end -}}
+    var e {{goName .Name}}
+    {{range .Dependency.Rel.Implementation}}e.{{goName .Source.Name}} = parent.{{goName .Target.Name}}
+    {{end -}}
+    {{if .Dependency.Sequence}}e.Seq = seq
+    {{end -}}
+{{else}}
+func (s *tableOf{{goName .Name}}) parse(p *rtl.Reader) {
     var e {{goName .Name}}
 {{end}}
+    {{range dependants .}}
+    {{if .Dependency.Sequence}}var seqOf{{goName .Name}} int{{end}}
+    {{end}}
     for p.Next() {
         switch p.Name() {
-        {{range newAttrs .}}
-        case {{printf "%q" .Name}}:
+        {{range newAttrs .}}case {{printf "%q" .Name}}:
             e.{{goName .Name}} = p.{{attrParse .}}()
-        {{end}}
-        {{range dependants .}}
-        case {{printf "%q" .Name}}:
-            s.model.{{goName .Name}}.parse(p.Record(), e)
-        {{end}}
+        {{end -}}
+        {{range dependants .}}case {{printf "%q" .Name}}:
+            {{if .Dependency.Sequence}}s.model.{{goName .Name}}.parse(p.Record(), e, seqOf{{goName .Name}})
+            seqOf{{goName .Name}}++
+            {{else}}s.model.{{goName .Name}}.parse(p.Record(), e)
+            {{end -}}
+        {{end -}}
         default:
             p.SetErr(er.ErrInvalidRecord)
         }
@@ -125,33 +139,38 @@ func (s *setOf{{goName .Name}}) parse(p *rtl.Reader) {
 
 func (e {{goName .Source.Name}}) {{goName .Name}}() {{goName .Target.Name}} {
     q := e.queryFor{{goName .Name}}()
-    return q.ExactlyOne()
+    return q.One()
+}
+
+func (s setOf{{goName .Source.Name}}) {{goName .Name}}() setOf{{goName .Target.Name}} {
+    var res setOf{{goName .Target.Name}}
+    s.ForEach(func(e {{goName .Source.Name}}) error {
+        res = res.Union(e.queryFor{{goName .Name}}())
+        return nil
+    })
+    return res
 }
 
 func (e {{goName .Source.Name}}) queryFor{{goName .Name}}() setOf{{goName .Target.Name}} {
     var q rtl.Query
-    {{with $rel := .}}
-    {{range $rel.Implementation}}
-    q = q.And(e.model.{{goName $rel.Target.Name}}.{{goName .Target.Name}}.Eq(e.
+    t := e.model.{{goName .Target.Name}}
+    {{range .Implementation}}q = q.And(t.{{goName .Target.Name}}.Eq(e.
         {{- range .BasePath}}{{goName .Rel.Name}}().{{end -}}{{goName .Source.Name -}}
     ))
-    {{end}}
-    {{end}}
+    {{end -}}
     return e.model.{{goName .Target.Name}}.Where(q)
 }
 
 {{end}}
 
 func (s setOf{{goName .Name}}) ForEach(f func({{goName .Name}}) error) error {
-    q := rtl.All(len(s.rows))
-    if s.query != nil { q = rtl.EvalQuery(*s.query, len(s.rows)) }
+    q := rtl.EvalQuery(s.query, len(s.rows))
     for q.Next() {
         d := s.rows[q.This()]
         if err := f({{goName .Name}}{
             model: s.model,
-            {{range .Attributes}}
-            {{goName .Name}}: d.{{goName .Name}},
-            {{end}}
+            {{range .Attributes}}{{goName .Name}}: d.{{goName .Name}},
+            {{end -}}
         }); err != nil { return err }
     }
     return nil
@@ -166,7 +185,7 @@ func (s setOf{{goName .Name}}) Count() int {
     return c
 }
 
-func (s setOf{{goName .Name}}) ExactlyOne() {{goName .Name}} {
+func (s setOf{{goName .Name}}) One() {{goName .Name}} {
     var res {{goName .Name}}
     s.ForEach(func(t {{goName .Name}}) error {
         res = t
@@ -175,64 +194,88 @@ func (s setOf{{goName .Name}}) ExactlyOne() {{goName .Name}} {
     return res
 }
 
-func (s setOf{{goName .Name}}) Where(q rtl.Query) setOf{{goName .Name}} {
-    res := s
-    if res.query != nil { q = q.And(*res.query) }
-    res.query = &q
+func (s setOf{{goName .Name}}) Many() []{{goName .Name}} {
+    var res []{{goName .Name}}
+    s.ForEach(func(t {{goName .Name}}) error {
+        res = append(res, t)
+        return nil
+    })
     return res
 }
 
-func (s *setOf{{goName .Name}}) Insert(e {{goName .Name}}) error {
-    if s.query != nil { return er.ErrImmutableSet }
-    r := s.evalKey(e)
+func (s setOf{{goName .Name}}) Where(q rtl.Query) setOf{{goName .Name}} {
+    res := s
+    res.query = q.And(res.query)
+    return res
+}
+
+func (s setOf{{goName .Name}}) Union(t setOf{{goName .Name}}) setOf{{goName .Name}} {
+    if s.model == nil {
+        return t
+    }
+    if t.model == nil {
+        return s
+    }
+    res := s
+    res.query = s.query.Or(t.query)
+    return res
+}
+
+func (s setOf{{goName .Name}}) Intersection(t setOf{{goName .Name}}) setOf{{goName .Name}} {
+    if s.model == nil {
+        return t
+    }
+    if t.model == nil {
+        return s
+    }
+    res := s
+    res.query = s.query.And(t.query)
+    return res
+}
+
+func (s *tableOf{{goName .Name}}) Insert(e {{goName .Name}}) error {
+    e.model = s.model
+    r := rtl.EvalQuery(e.identity(), len(s.rows))
     if r.Next() { return er.ErrDuplicateKey }
     s.clearSpace(r)
     s.writeRow(r, e)
     return nil
 }
 
-func (s *setOf{{goName .Name}}) Update(e {{goName .Name}}) error {
-    if s.query != nil { return er.ErrImmutableSet }
-    r := s.evalKey(e)
+func (s *tableOf{{goName .Name}}) Update(e {{goName .Name}}) error {
+    e.model = s.model
+    r := rtl.EvalQuery(e.identity(), len(s.rows))
     if !r.Next() { return er.ErrMissingEntity }
     s.writeRow(r, e)
     return nil
 }
 
-func (s *setOf{{goName .Name}}) Upsert(e {{goName .Name}}) error {
-    if s.query != nil { return er.ErrImmutableSet }
-    r := s.evalKey(e)
-    if !r.Next() { s.clearSpace(r) }
-    s.writeRow(r, e)
-    return nil
-}
-
-func (s *setOf{{goName .Name}}) Delete(e {{goName .Name}}) error {
-    if s.query != nil { return er.ErrImmutableSet }
-    r := s.evalKey(e)
+func (s *tableOf{{goName .Name}}) Delete(e {{goName .Name}}) error {
+    e.model = s.model
+    r := rtl.EvalQuery(e.identity(), len(s.rows))
     if !r.Next() { return er.ErrMissingEntity }
     copy(s.rows[r.This():], s.rows[r.This():+1])
     s.rows = s.rows[:len(s.rows)-1]
     return nil
 }
 
-func (s setOf{{goName .Name}}) evalKey(e {{goName .Name}}) *rtl.QueryResult {
+func (e {{goName .Name}}) identity() rtl.Query {
     var query rtl.Query
+    s := e.model.{{goName .Name}}
     {{range .Attributes}}{{if .Identifying}}query = query.And(s.{{goName .Name}}.Eq(e.{{goName .Name}}))
     {{end}}{{end -}}
-    return rtl.EvalQuery(query, len(s.rows))
+    return query
 }
 
-func (s *setOf{{goName .Name}}) clearSpace(r *rtl.QueryResult) {
+func (s *tableOf{{goName .Name}}) clearSpace(r *rtl.QueryResult) {
     s.rows = append(s.rows, attrsOf{{goName .Name}}{})
     copy(s.rows[r.This()+1:], s.rows[r.This():])
 }
 
-func (s *setOf{{goName .Name}}) writeRow(r *rtl.QueryResult, e {{goName .Name}}) {
+func (s *tableOf{{goName .Name}}) writeRow(r *rtl.QueryResult, e {{goName .Name}}) {
     s.rows[r.This()] = attrsOf{{goName .Name}} {
-    {{range .Attributes}}
-        {{goName .Name}}: e.{{goName .Name}},
-    {{end}}
+    {{range .Attributes}}{{goName .Name}}: e.{{goName .Name}},
+    {{end -}}
     }
 }
 

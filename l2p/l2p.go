@@ -2,8 +2,8 @@ package l2p
 
 import (
 	"github.com/bobappleyard/er"
-	"github.com/bobappleyard/top"
-	"github.com/bobappleyard/unify"
+	"github.com/bobappleyard/er/util/top"
+	"github.com/bobappleyard/er/util/unify"
 )
 
 func sortRels(m *er.EntityModel) ([]*er.Relationship, error) {

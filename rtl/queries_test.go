@@ -117,6 +117,16 @@ func TestQueryEvaluation(t *testing.T) {
 				{1, "Banana", 20},
 			},
 		},
+		{
+			name: "ThreeAlts",
+			q:    productID.Eq("Apple").Or(productID.Eq("Banana")).Or(productID.Eq("Butter")),
+			rows: []dept{
+				{1, "Apple", 10},
+				{1, "Banana", 20},
+				{1, "Butter", 1},
+				{2, "Apple", 10},
+			},
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			got := runQuery(test.q)
@@ -124,16 +134,5 @@ func TestQueryEvaluation(t *testing.T) {
 				t.Errorf("got %v, expected %v", got, test.rows)
 			}
 		})
-	}
-}
-
-func TestAll(t *testing.T) {
-	q := All(10)
-	i := 0
-	for q.Next() {
-		if q.This() != i {
-			t.Fail()
-		}
-		i++
 	}
 }
