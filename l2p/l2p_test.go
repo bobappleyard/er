@@ -84,6 +84,7 @@ func TestTriangle(t *testing.T) {
 			Name:   "f",
 			Source: b,
 			Target: c,
+			Path:   "parent/~parent",
 		},
 	}
 	c.Relationships = []*Relationship{
@@ -92,16 +93,6 @@ func TestTriangle(t *testing.T) {
 			Source:      c,
 			Target:      a,
 			Identifying: true,
-		},
-	}
-	b.Relationships[1].Constraints = []Constraint{
-		{
-			Diagonal{Components: []Component{
-				{Rel: b.Relationships[0]},
-			}},
-			Riser{[]Component{
-				{Rel: c.Relationships[0]},
-			}},
 		},
 	}
 
@@ -149,6 +140,7 @@ func TestSquare(t *testing.T) {
 			Name:   "f",
 			Source: c,
 			Target: d,
+			Path:   "parent/s/~parent",
 		},
 	}
 	d.Relationships = []*Relationship{
@@ -157,17 +149,6 @@ func TestSquare(t *testing.T) {
 			Source:      d,
 			Target:      b,
 			Identifying: true,
-		},
-	}
-	c.Relationships[1].Constraints = []Constraint{
-		{
-			Diagonal{[]Component{
-				{Rel: c.Relationships[0]},
-				{Rel: a.Relationships[0]},
-			}},
-			Riser{[]Component{
-				{Rel: d.Relationships[0]},
-			}},
 		},
 	}
 
@@ -217,6 +198,7 @@ func TestSquareLongRiser(t *testing.T) {
 			Name:   "f",
 			Source: c,
 			Target: e,
+			Path:   "parent/s/~parent/~parent",
 		},
 	}
 	d.Relationships = []*Relationship{
@@ -233,18 +215,6 @@ func TestSquareLongRiser(t *testing.T) {
 			Source:      e,
 			Target:      d,
 			Identifying: true,
-		},
-	}
-	c.Relationships[1].Constraints = []Constraint{
-		{
-			Diagonal{[]Component{
-				{Rel: c.Relationships[0]},
-				{Rel: a.Relationships[0]},
-			}},
-			Riser{[]Component{
-				{Rel: e.Relationships[0]},
-				{Rel: d.Relationships[0]},
-			}},
 		},
 	}
 
@@ -296,6 +266,7 @@ func TestCube(t *testing.T) {
 			Name:   "f",
 			Source: c,
 			Target: d,
+			Path:   "parent/s/~parent&parent2/s2/~parent2",
 		},
 		{
 			Name:   "parent2",
@@ -322,26 +293,6 @@ func TestCube(t *testing.T) {
 			Name:   "s2",
 			Source: e,
 			Target: f,
-		},
-	}
-	c.Relationships[1].Constraints = []Constraint{
-		{
-			Diagonal{[]Component{
-				{Rel: c.Relationships[0]},
-				{Rel: a.Relationships[0]},
-			}},
-			Riser{[]Component{
-				{Rel: d.Relationships[0]},
-			}},
-		},
-		{
-			Diagonal{[]Component{
-				{Rel: c.Relationships[2]},
-				{Rel: e.Relationships[0]},
-			}},
-			Riser{[]Component{
-				{Rel: d.Relationships[1]},
-			}},
 		},
 	}
 
@@ -396,6 +347,7 @@ func TestCubeShared(t *testing.T) {
 			Name:   "f",
 			Source: c,
 			Target: d,
+			Path:   "parent/(s/~parent&s2/~parent2)",
 		},
 	}
 	d.Relationships = []*Relationship{
@@ -410,26 +362,6 @@ func TestCubeShared(t *testing.T) {
 			Source:      d,
 			Target:      e,
 			Identifying: true,
-		},
-	}
-	c.Relationships[1].Constraints = []Constraint{
-		{
-			Diagonal{[]Component{
-				{Rel: c.Relationships[0]},
-				{Rel: a.Relationships[0]},
-			}},
-			Riser{[]Component{
-				{Rel: d.Relationships[0]},
-			}},
-		},
-		{
-			Diagonal{[]Component{
-				{Rel: c.Relationships[0]},
-				{Rel: a.Relationships[1]},
-			}},
-			Riser{[]Component{
-				{Rel: d.Relationships[1]},
-			}},
 		},
 	}
 
@@ -468,6 +400,7 @@ func TestTriangleTwin(t *testing.T) {
 			Name:   "f",
 			Source: b,
 			Target: c,
+			Path:   "parent/(~parent&~parent2)",
 		},
 	}
 	c.Relationships = []*Relationship{
@@ -484,148 +417,130 @@ func TestTriangleTwin(t *testing.T) {
 			Identifying: true,
 		},
 	}
-	b.Relationships[1].Constraints = []Constraint{
-		{
-			Diagonal{Components: []Component{
-				{Rel: b.Relationships[0]},
-			}},
-			Riser{[]Component{
-				{Rel: c.Relationships[0]},
-			}},
-		},
-		{
-			Diagonal{Components: []Component{
-				{Rel: b.Relationships[0]},
-			}},
-			Riser{[]Component{
-				{Rel: c.Relationships[1]},
-			}},
-		},
-	}
 
 	LogicalToPhysical(&m)
 	testAttrs(t, m.Types[1].Attributes, []string{"name", "parent_name", "f_name"})
 }
 
-func TestSequence(t *testing.T) {
-	m := EntityModel{
-		Types: []*EntityType{
-			{Name: "a"},
-			{Name: "b"},
-			{Name: "c"},
-		},
-	}
-	a := m.Types[0]
-	b := m.Types[1]
-	c := m.Types[2]
-	for _, t := range m.Types {
-		t.Attributes = []*Attribute{
-			{
-				Owner:       t,
-				Name:        "name",
-				Type:        StringType,
-				Identifying: true,
-			},
-		}
-	}
-	b.Relationships = []*Relationship{
-		{
-			Name:   "parent",
-			Source: b,
-			Target: a,
-		},
-		{
-			Name:   "f",
-			Source: b,
-			Target: c,
-		},
-	}
-	c.Relationships = []*Relationship{
-		{
-			Name:        "parent",
-			Source:      c,
-			Target:      a,
-			Identifying: true,
-		},
-	}
-	b.Relationships[1].Constraints = []Constraint{
-		{
-			Diagonal{Components: []Component{
-				{Rel: b.Relationships[0]},
-			}},
-			Riser{[]Component{
-				{Rel: c.Relationships[0]},
-			}},
-		},
-	}
-	b.Dependency = Dependency{
-		Rel:      b.Relationships[0],
-		Sequence: true,
-	}
+// func TestSequence(t *testing.T) {
+// 	m := EntityModel{
+// 		Types: []*EntityType{
+// 			{Name: "a"},
+// 			{Name: "b"},
+// 			{Name: "c"},
+// 		},
+// 	}
+// 	a := m.Types[0]
+// 	b := m.Types[1]
+// 	c := m.Types[2]
+// 	for _, t := range m.Types {
+// 		t.Attributes = []*Attribute{
+// 			{
+// 				Owner:       t,
+// 				Name:        "name",
+// 				Type:        StringType,
+// 				Identifying: true,
+// 			},
+// 		}
+// 	}
+// 	b.Relationships = []*Relationship{
+// 		{
+// 			Name:   "parent",
+// 			Source: b,
+// 			Target: a,
+// 		},
+// 		{
+// 			Name:   "f",
+// 			Source: b,
+// 			Target: c,
+// 		},
+// 	}
+// 	c.Relationships = []*Relationship{
+// 		{
+// 			Name:        "parent",
+// 			Source:      c,
+// 			Target:      a,
+// 			Identifying: true,
+// 		},
+// 	}
+// 	b.Relationships[1].Constraints = []Constraint{
+// 		{
+// 			Diagonal{Components: []Component{
+// 				{Rel: b.Relationships[0]},
+// 			}},
+// 			Riser{[]Component{
+// 				{Rel: c.Relationships[0]},
+// 			}},
+// 		},
+// 	}
+// 	b.Dependency = Dependency{
+// 		Rel:      b.Relationships[0],
+// 		Sequence: true,
+// 	}
 
-	LogicalToPhysical(&m)
-	testAttrs(t, m.Types[1].Attributes, []string{"name", "parent_name", "f_name", "seq"})
-}
+// 	LogicalToPhysical(&m)
+// 	testAttrs(t, m.Types[1].Attributes, []string{"name", "parent_name", "f_name", "seq"})
+// }
 
-func TestSequenceKey(t *testing.T) {
-	m := EntityModel{
-		Types: []*EntityType{
-			{Name: "a"},
-			{Name: "b"},
-			{Name: "c"},
-		},
-	}
-	a := m.Types[0]
-	b := m.Types[1]
-	c := m.Types[2]
-	for _, t := range m.Types {
-		t.Attributes = []*Attribute{
-			{
-				Owner:       t,
-				Name:        "name",
-				Type:        StringType,
-				Identifying: true,
-			},
-		}
-	}
-	b.Relationships = []*Relationship{
-		{
-			Name:   "parent",
-			Source: b,
-			Target: a,
-		},
-		{
-			Name:   "f",
-			Source: b,
-			Target: c,
-		},
-	}
-	c.Relationships = []*Relationship{
-		{
-			Name:        "parent",
-			Source:      c,
-			Target:      a,
-			Identifying: true,
-		},
-	}
-	b.Relationships[1].Constraints = []Constraint{
-		{
-			Diagonal{Components: []Component{
-				{Rel: b.Relationships[0]},
-			}},
-			Riser{[]Component{
-				{Rel: c.Relationships[0]},
-			}},
-		},
-	}
-	c.Dependency = Dependency{
-		Rel:      c.Relationships[0],
-		Sequence: true,
-	}
+// func TestSequenceKey(t *testing.T) {
+// 	m := EntityModel{
+// 		Types: []*EntityType{
+// 			{Name: "a"},
+// 			{Name: "b"},
+// 			{Name: "c"},
+// 		},
+// 	}
+// 	a := m.Types[0]
+// 	b := m.Types[1]
+// 	c := m.Types[2]
+// 	for _, t := range m.Types {
+// 		t.Attributes = []*Attribute{
+// 			{
+// 				Owner:       t,
+// 				Name:        "name",
+// 				Type:        StringType,
+// 				Identifying: true,
+// 			},
+// 		}
+// 	}
+// 	b.Relationships = []*Relationship{
+// 		{
+// 			Name:   "parent",
+// 			Source: b,
+// 			Target: a,
+// 		},
+// 		{
+// 			Name:   "f",
+// 			Source: b,
+// 			Target: c,
+// 		},
+// 	}
+// 	c.Relationships = []*Relationship{
+// 		{
+// 			Name:        "parent",
+// 			Source:      c,
+// 			Target:      a,
+// 			Identifying: true,
+// 		},
+// 	}
+// 	b.Relationships[1].Constraints = []Constraint{
+// 		{
+// 			Diagonal{Components: []Component{
+// 				{Rel: b.Relationships[0]},
+// 			}},
+// 			Riser{[]Component{
+// 				{Rel: c.Relationships[0]},
+// 			}},
+// 		},
+// 	}
+// 	c.Dependency = Dependency{
+// 		Rel:      c.Relationships[0],
+// 		Sequence: true,
+// 	}
 
-	LogicalToPhysical(&m)
-	testAttrs(t, m.Types[1].Attributes, []string{"f_name", "f_seq", "name", "parent_name"})
-}
+// 	LogicalToPhysical(&m)
+// 	testAttrs(t, m.Types[1].Attributes, []string{"f_name", "f_seq", "name", "parent_name"})
+// }
 
 func testAttrs(t *testing.T, attrs []*Attribute, names []string) {
 	var anames []string

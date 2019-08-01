@@ -41,11 +41,10 @@ const (
 
 // Relationship represents a relationship.
 type Relationship struct {
-	Name           string           `rsf:"name"`
-	TargetName     string           `rsf:"type_name"`
-	Constraints    []Constraint     `rsf:"constraint"`
-	Identifying    bool             `rsf:"identifying"`
-	Implementation []Implementation `rsf:"implementation"`
+	Name           string `rsf:"name"`
+	TargetName     string `rsf:"type_name"`
+	Identifying    bool   `rsf:"identifying"`
+	Path           string
 	Source, Target *EntityType
 }
 
@@ -54,35 +53,9 @@ type Dependency struct {
 	Sequence bool
 }
 
-// Constraint represnts a constraint over a relationship.
-type Constraint struct {
-	Diagonal Diagonal `rsf:"diagonal"`
-	Riser    Riser    `rsf:"riser"`
-}
-
-type Diagonal struct {
-	Components []Component `rsf:"component"`
-}
-
-type Riser struct {
-	Components []Component `rsf:"component"`
-}
-
-// Component represents part of a path.
-type Component struct {
-	RelName string `rsf:"rel_name"`
-	Rel     *Relationship
-}
-
-// Implementation represents part of an attribute filter.
-type Implementation struct {
-	Source, Target *Attribute
-	BasePath       []Component
-}
-
-func (a *Attribute) String() string {
-	return fmt.Sprintf("%s.%s", a.Owner.Name, a.Name)
-}
+// func (a *Attribute) String() string {
+// 	return fmt.Sprintf("%s.%s", a.Owner.Name, a.Name)
+// }
 
 func (t *EntityType) String() string {
 	return t.Name

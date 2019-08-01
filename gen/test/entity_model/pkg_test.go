@@ -46,11 +46,7 @@ func TestModel(t *testing.T) {
 		relationship {
 			name: "f"
 			target_name: "d"
-			constraint {
-				diagonal { relationship_name: "parent" }
-				diagonal { relationship_name: "s" }
-				riser { relationship_name: "parent" }
-			}
+			path: "parent=parent/s"
 		}
 	}
 
@@ -68,17 +64,6 @@ func TestModel(t *testing.T) {
 			name: "parent"
 			target_name: "b"
 			identifying: "true"
-		}
-	}
-
-	entity_type {
-		name: "e"
-		dependency {
-			relationship_name: "parent"
-		}
-		relationship {
-			name: "parent"
-			target_name: "b"
 		}
 	}
 	`))

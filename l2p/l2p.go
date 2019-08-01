@@ -1,221 +1,326 @@
 package l2p
 
 import (
+	"errors"
+	"fmt"
 	"github.com/bobappleyard/er"
-	"github.com/bobappleyard/er/util/top"
-	"github.com/bobappleyard/er/util/unify"
+	"github.com/bobappleyard/er/util/path"
+	"io"
+	"sort"
 )
 
-func sortRels(m *er.EntityModel) ([]*er.Relationship, error) {
-	var g top.Graph
-	for _, t := range m.Types {
-		g.Link(m, t)
-		for _, r := range t.Relationships {
-			g.Link(r.Target, r)
-			for _, c := range r.Constraints {
-				for _, c := range c.Diagonal.Components {
-					g.Link(c.Rel, r)
-				}
-				for _, c := range c.Riser.Components {
-					g.Link(c.Rel, r)
-				}
-			}
-			if r.Identifying {
-				g.Link(r, t)
+var (
+	errModelChanged = errors.New("model changed")
+	ErrNoPath       = errors.New("no path through model")
+)
+
+func LogicalToPhysical(m *er.EntityModel) error {
+	for {
+		err := performAnalysis(modelEnv{m: m})
+		if err == errModelChanged {
+			continue
+		}
+		return err
+	}
+}
+
+func performAnalysis(n modelEnv) error {
+	for _, e := range n.m.Types {
+		for _, r := range e.Relationships {
+			_, err := n.implement(r)
+			if err != nil {
+				return err
 			}
 		}
 	}
-	ires, err := g.Sort()
+	return nil
+}
+
+type modelEnv struct {
+	m       *er.EntityModel
+	changed *bool
+	indent  string
+	visited []*er.Relationship
+}
+type pathType []partition
+type partition struct {
+	source, target set
+}
+type set struct {
+	entityType *er.EntityType
+	attrs      uint64
+}
+
+var (
+	absolute  = &er.EntityType{Name: "*"}
+	attribute = &er.EntityType{Name: "$"}
+)
+
+func (n modelEnv) extend(r *er.Relationship) modelEnv {
+	f := modelEnv{
+		m:       n.m,
+		indent:  n.indent + "\t",
+		changed: n.changed,
+		visited: append([]*er.Relationship{}, n.visited...),
+	}
+	f.visited = append(f.visited, r)
+	return f
+}
+
+func (n modelEnv) implement(r *er.Relationship) (path.Path, error) {
+	for _, r := range r.Target.Relationships {
+		if !r.Identifying {
+			continue
+		}
+		_, err := n.extend(r).implement(r)
+		if err != nil {
+			return nil, err
+		}
+	}
+	var err error
+	var s path.Set = pathType{}
+	p := path.Chart(path.InverseTerm{"/" + r.Source.Name}, path.Term{"/" + r.Target.Name})
+	if r.Path != "" {
+		q, err := path.Parse([]byte(r.Path))
+		if err != nil {
+			return nil, err
+		}
+		p = path.Intersection{p, q}
+	}
+	s, err = path.Eval(p, n)
 	if err != nil {
 		return nil, err
 	}
-	res := make([]*er.Relationship, 0, len(ires))
-	for _, r := range ires {
-		if r, ok := r.(*er.Relationship); ok {
-			res = append(res, r)
-		}
-	}
-	return res, nil
+	return n.addMissingAttributes(r, p, s.(pathType))
 }
 
-func LogicalToPhysical(m *er.EntityModel) error {
-	rs, err := sortRels(m)
-	if err != nil {
-		return err
+func (n modelEnv) addMissingAttributes(r *er.Relationship, p path.Path, s pathType) (path.Path, error) {
+	if len(s) == 0 {
+		return nil, ErrNoPath
 	}
-	for _, r := range rs {
-		if r.Implementation != nil {
+	var target set
+	for _, p := range s {
+		if p.target.attrCount() > target.attrCount() {
+			target = p.target
+		}
+	}
+	var err error
+	for i, a := range r.Target.Attributes {
+		if !a.Identifying || target.contains(i) {
 			continue
 		}
-		if err := (&relationshipImplementation{r: r}).create(); err != nil {
-			return err
+		err = errModelChanged
+		name := r.Name + "_" + a.Name
+		r.Source.Attributes = append(r.Source.Attributes, &er.Attribute{
+			Name:        name,
+			Type:        a.Type,
+			Identifying: r.Identifying,
+			Owner:       r.Source,
+		})
+		part := path.Join{
+			path.Term{name},
+			path.InverseTerm{a.Name},
 		}
-		t := r.Source
-		if t.Dependency.Rel == r && t.Dependency.Sequence {
-			t.Attributes = append(t.Attributes, &er.Attribute{
-				Name:        "seq",
-				Type:        er.IntType,
-				Identifying: r.Identifying,
-				Owner:       t,
+		if p == nil {
+			p = part
+		} else {
+			p = path.Intersection{p, part}
+		}
+	}
+	if err == errModelChanged {
+		r.Path = p.String()
+	}
+	return p, err
+}
+
+func (n modelEnv) Lookup(name string) (path.Set, error) {
+	var res pathType
+	for _, e := range n.m.Types {
+		if "/"+e.Name == name {
+			res = append(res, partition{
+				source: set{entityType: absolute},
+				target: set{entityType: e},
+			})
+		}
+		for i, a := range e.Attributes {
+			if a.Name != name {
+				continue
+			}
+			res = append(res, partition{
+				source: set{entityType: e, attrs: 1 << uint64(i)},
+				target: set{entityType: attribute},
+			})
+		}
+		for _, r := range e.Relationships {
+			if r.Name != name || n.seen(r) {
+				continue
+			}
+			f := n.extend(r)
+			p, err := f.implement(r)
+			if err != nil {
+				return nil, err
+			}
+			s, err := path.Eval(p, f)
+			if err != nil {
+				return nil, err
+			}
+			res = append(res, (s.(pathType))...)
+		}
+	}
+	return res.prune(), nil
+}
+
+func (e modelEnv) seen(r *er.Relationship) bool {
+	for _, s := range e.visited {
+		if s == r {
+			return true
+		}
+	}
+	return false
+}
+
+func (pt pathType) Inverse() path.Set {
+	res := make(pathType, len(pt))
+	for i, p := range pt {
+		res[i].source = p.target
+		res[i].target = p.source
+	}
+	return res
+}
+
+func (left pathType) Join(right path.Set) path.Set {
+	var res pathType
+	for _, left := range left {
+		for _, right := range right.(pathType) {
+			if left.target.singleEntity().subsetOf(right.source) {
+				res = append(res, partition{
+					source: left.source,
+					target: right.target,
+				})
+			}
+		}
+	}
+	return res.prune()
+}
+
+func (left pathType) Intersection(right path.Set) path.Set {
+	var res pathType
+	for _, left := range left {
+		for _, right := range right.(pathType) {
+			if left.source.entityType != right.source.entityType {
+				continue
+			}
+			if left.target.entityType != right.target.entityType {
+				continue
+			}
+			res = append(res, left, right, partition{
+				source: left.source.mergeWith(right.source).singleEntity(),
+				target: left.target.mergeWith(right.target).singleEntity(),
 			})
 		}
 	}
-	return nil
+	return res.prune()
 }
 
-type relationshipImplementation struct {
-	r    *er.Relationship
-	key  []unify.Var
-	subs unify.Subs
+func (left pathType) Union(right path.Set) path.Set {
+	panic("unimplemented")
 }
 
-func (r *relationshipImplementation) create() error {
-	err := r.initProblem()
-	if err != nil {
-		return err
+func (pt pathType) prune() path.Set {
+	if len(pt) < 2 {
+		return pt
 	}
-	for _, c := range r.r.Constraints {
-		err = r.applyConstraint(c)
-		if err != nil {
-			return err
+	sort.Slice(pt, func(i, j int) bool { return pt[i].lessThan(pt[j]) })
+	res := make(pathType, 0, len(pt))
+	res = append(res, pt[0])
+	for i, q := range pt[1:] {
+		p := pt[i]
+		if p.lessThan(q) || q.lessThan(p) {
+			res = append(res, q)
 		}
 	}
-	r.implement()
-	return nil
+	return res
 }
 
-func term(e *er.EntityType, f func(*er.Attribute) unify.Term) unify.Term {
-	t := unify.Apply{Fn: e}
-	for _, a := range e.Attributes {
+func (p partition) lessThan(q partition) bool {
+	if p.source.entityType.Name != q.source.entityType.Name {
+		return p.source.entityType.Name < q.source.entityType.Name
+	}
+	if p.target.entityType.Name != q.target.entityType.Name {
+		return p.target.entityType.Name < q.target.entityType.Name
+	}
+	if p.source.attrs != q.source.attrs {
+		return p.source.attrs < q.source.attrs
+	}
+	if p.target.attrs != q.target.attrs {
+		return p.target.attrs < q.target.attrs
+	}
+	return false
+}
+
+func (left set) subsetOf(right set) bool {
+	if left.entityType != right.entityType {
+		return false
+	}
+	return left.attrs&right.attrs == right.attrs
+}
+
+func (s set) attrCount() int {
+	v := s.attrs
+	c := 0
+	for v != 0 {
+		c++
+		v &= v - 1
+	}
+	return c
+}
+
+func (s set) contains(i int) bool {
+	return s.attrs&(1<<uint64(i)) != 0
+}
+
+func (left set) mergeWith(right set) set {
+	return set{left.entityType, left.attrs | right.attrs}
+}
+
+func (s set) singleEntity() set {
+	for i, a := range s.entityType.Attributes {
 		if !a.Identifying {
 			continue
 		}
-		t.Args = append(t.Args, f(a))
+		if !s.contains(i) {
+			return s
+		}
 	}
-	return t
+	allAttrs := (1 << uint64(len(s.entityType.Attributes))) - 1
+	return set{s.entityType, uint64(allAttrs)}
 }
 
-func (r *relationshipImplementation) initProblem() error {
-	var key []unify.Var
-	target := term(r.r.Target, func(a *er.Attribute) unify.Term {
-		v := unify.Var{Of: a}
-		key = append(key, v)
-		return v
-	})
-	source := term(r.r.Target, func(a *er.Attribute) unify.Term {
-		return unify.Var{Of: &er.Attribute{
-			Owner:       r.r.Source,
-			Name:        r.r.Name + "_" + a.Name,
-			Type:        a.Type,
-			Identifying: r.r.Identifying,
-		}}
-	})
-	subs, err := unify.Unify(target, source, nil)
-	r.key = key
-	r.subs = subs
-	return err
+func (pt pathType) Format(t fmt.State, c rune) {
+	for i, p := range pt {
+		if i != 0 {
+			io.WriteString(t, " | ")
+		}
+		fmt.Fprint(t, p)
+	}
 }
 
-func (r *relationshipImplementation) applyConstraint(c er.Constraint) error {
-	var source, target unify.Term
-	var err error
-	target, r.subs, err = followRiser(c.Riser, r.subs)
-	if err != nil {
-		return err
-	}
-	source, r.subs, err = followDiagonal(c.Diagonal, r.subs)
-	if err != nil {
-		return err
-	}
-	r.subs, err = unify.Unify(target, source, r.subs)
-	return err
+func (p partition) Format(t fmt.State, c rune) {
+	fmt.Fprintf(t, "%s -> %s", p.source, p.target)
 }
 
-func (r *relationshipImplementation) implement() {
-	r.r.Implementation = make([]er.Implementation, len(r.key))
-	for i, a := range r.key {
-		s := r.subs[a]
-		targ := a.Of.(*er.Attribute)
-		switch s := s.(type) {
-		case unify.Var:
-			attr := s.Of.(*er.Attribute)
-			r.r.Source.Attributes = append(r.r.Source.Attributes, attr)
-			if attr.Identifying {
-				copy(r.r.Source.Attributes[1:], r.r.Source.Attributes)
-				r.r.Source.Attributes[0] = attr
+func (s set) Format(t fmt.State, c rune) {
+	io.WriteString(t, s.entityType.Name)
+	io.WriteString(t, "(")
+	written := false
+	for i, a := range s.entityType.Attributes {
+		if s.contains(i) {
+			if written {
+				io.WriteString(t, ",")
 			}
-			r.r.Implementation[i] = er.Implementation{
-				Target: targ,
-				Source: attr,
-			}
-		case unify.Apply:
-			r.r.Implementation[i] = er.Implementation{
-				Target:   targ,
-				Source:   s.Fn.(*er.Attribute),
-				BasePath: pathFromTrace((s.Args[0].(unify.Apply)).Fn),
-			}
+			written = true
+			io.WriteString(t, a.Name)
 		}
 	}
-}
-
-func followDiagonal(d er.Diagonal, subs unify.Subs) (unify.Term, unify.Subs, error) {
-	f := func(a *er.Attribute, path []er.Component) unify.Term {
-		return unify.Apply{Fn: a, Args: []unify.Term{unify.Apply{Fn: traceFromPath(path)}}}
-	}
-	return followPath(d.Components, subs, f)
-}
-
-func followRiser(r er.Riser, subs unify.Subs) (unify.Term, unify.Subs, error) {
-	f := func(a *er.Attribute, path []er.Component) unify.Term {
-		return unify.Var{Of: a}
-	}
-	return followPath(r.Components, subs, f)
-}
-
-func followPath(path []er.Component, subs unify.Subs, sourceAttr func(*er.Attribute, []er.Component) unify.Term) (unify.Term, unify.Subs, error) {
-	var err error
-	var dest unify.Term
-	for idx := range path {
-		cr := path[idx].Rel
-		source := unify.Apply{Fn: cr.Target, Args: make([]unify.Term, len(cr.Implementation))}
-		for i, a := range cr.Implementation {
-			source.Args[i] = sourceAttr(a.Source, path[:idx])
-		}
-		dest = term(cr.Target, func(a *er.Attribute) unify.Term {
-			return unify.Var{Of: a}
-		})
-		subs, err = unify.Unify(source, dest, subs)
-		if err != nil {
-			return nil, nil, err
-		}
-	}
-	return dest, subs, nil
-}
-
-type trace struct {
-	cur  *er.Relationship
-	next interface{}
-}
-
-func traceFromPath(p []er.Component) interface{} {
-	if len(p) == 0 {
-		return nil
-	}
-	return trace{
-		p[0].Rel,
-		traceFromPath(p[1:]),
-	}
-}
-
-func pathFromTrace(t interface{}) []er.Component {
-	var res []er.Component
-	for {
-		if t == nil {
-			break
-		}
-		c := t.(trace)
-		res = append(res, er.Component{Rel: c.cur})
-		t = c.next
-	}
-	return res
+	io.WriteString(t, ")")
 }

@@ -86,11 +86,6 @@ func TestBoot(t *testing.T) {
 			{Name: "attribute"},
 			{Name: "relationship"},
 			{Name: "dependency"},
-			{Name: "implementation"},
-			{Name: "constraint"},
-			{Name: "step"},
-			{Name: "diagonal"},
-			{Name: "riser"},
 		},
 	}
 
@@ -98,11 +93,6 @@ func TestBoot(t *testing.T) {
 	attribute := m.Types[1]
 	relationship := m.Types[2]
 	dependency := m.Types[3]
-	implementation := m.Types[4]
-	constraint := m.Types[5]
-	step := m.Types[6]
-	diagonal := m.Types[7]
-	riser := m.Types[8]
 
 	entityType.Attributes = []*Attribute{
 		{Name: "name", Type: StringType, Identifying: true, Owner: entityType},
@@ -115,18 +105,10 @@ func TestBoot(t *testing.T) {
 	relationship.Attributes = []*Attribute{
 		{Name: "name", Type: StringType, Identifying: true, Owner: relationship},
 		{Name: "identifying", Type: BoolType, Owner: relationship},
+		{Name: "path", Type: StringType, Owner: relationship},
 	}
 	dependency.Attributes = []*Attribute{
 		{Name: "sequence", Type: BoolType, Owner: dependency},
-	}
-	step.Attributes = []*Attribute{
-		{Name: "relationship_name", Type: StringType, Owner: step},
-	}
-	diagonal.Attributes = []*Attribute{
-		{Name: "relationship_name", Type: StringType, Owner: diagonal},
-	}
-	riser.Attributes = []*Attribute{
-		{Name: "relationship_name", Type: StringType, Owner: riser},
 	}
 
 	attribute.Relationships = []*Relationship{
@@ -140,68 +122,10 @@ func TestBoot(t *testing.T) {
 		{Name: "entity_type", Source: dependency, Target: entityType, Identifying: true},
 		{Name: "relationship", Source: dependency, Target: relationship},
 	}
-	implementation.Relationships = []*Relationship{
-		{Name: "relationship", Source: implementation, Target: relationship, Identifying: true},
-		{Name: "target", Source: implementation, Target: attribute, Identifying: true},
-		{Name: "source", Source: implementation, Target: attribute},
-	}
-	constraint.Relationships = []*Relationship{
-		{Name: "relationship", Source: constraint, Target: relationship, Identifying: true},
-	}
-	step.Relationships = []*Relationship{
-		{Name: "implementation", Source: step, Target: implementation, Identifying: true},
-	}
-	diagonal.Relationships = []*Relationship{
-		{Name: "constraint", Source: diagonal, Target: constraint, Identifying: true},
-	}
-	riser.Relationships = []*Relationship{
-		{Name: "constraint", Source: riser, Target: constraint, Identifying: true},
-	}
 
 	attribute.Dependency.Rel = attribute.Relationships[0]
 	relationship.Dependency.Rel = relationship.Relationships[0]
 	dependency.Dependency.Rel = dependency.Relationships[0]
-	implementation.Dependency.Rel = implementation.Relationships[0]
-	constraint.Dependency.Rel = constraint.Relationships[0]
-	step.Dependency.Rel = step.Relationships[0]
-	diagonal.Dependency.Rel = diagonal.Relationships[0]
-	riser.Dependency.Rel = riser.Relationships[0]
-
-	implementation.Dependency.Sequence = true
-	constraint.Dependency.Sequence = true
-	step.Dependency.Sequence = true
-	diagonal.Dependency.Sequence = true
-	riser.Dependency.Sequence = true
-
-	followPath := func(e *EntityType, path ...string) []Component {
-		var res []Component
-		for _, step := range path {
-			for _, rel := range e.Relationships {
-				if rel.Name != step {
-					continue
-				}
-				res = append(res, Component{Rel: rel})
-				e = rel.Target
-				break
-			}
-		}
-		return res
-	}
-
-	dependency.Relationships[1].Constraints = []Constraint{{
-		Diagonal: Diagonal{Components: followPath(dependency, "entity_type")},
-		Riser:    Riser{Components: followPath(relationship, "source")},
-	}}
-
-	implementation.Relationships[1].Constraints = []Constraint{{
-		Diagonal: Diagonal{Components: followPath(implementation, "relationship", "target")},
-		Riser:    Riser{Components: followPath(attribute, "owner")},
-	}}
-
-	implementation.Relationships[2].Constraints = []Constraint{{
-		Diagonal: Diagonal{Components: followPath(implementation, "relationship", "source")},
-		Riser:    Riser{Components: followPath(attribute, "owner")},
-	}}
 
 	generateAndTest(t, m)
 }
