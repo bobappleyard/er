@@ -11,13 +11,16 @@ import (
 
 var (
 	errModelChanged = errors.New("model changed")
+	errModelLoop    = errors.New("model has a loop")
 	ErrNoPath       = errors.New("no path through model")
 )
 
 func LogicalToPhysical(m *er.EntityModel) error {
 	for {
 		err := performAnalysis(modelEnv{m: m})
-		if err == errModelChanged {
+		if u, ok := err.(*modelUpdate); ok {
+			u.r.Source.Attributes = append(u.r.Source.Attributes, u.attrs...)
+			u.r.Path = u.path.String()
 			continue
 		}
 		return err
@@ -38,8 +41,6 @@ func performAnalysis(n modelEnv) error {
 
 type modelEnv struct {
 	m       *er.EntityModel
-	changed *bool
-	indent  string
 	visited []*er.Relationship
 }
 type pathType []partition
@@ -50,6 +51,13 @@ type set struct {
 	entityType *er.EntityType
 	attrs      uint64
 }
+type modelUpdate struct {
+	r     *er.Relationship
+	attrs []*er.Attribute
+	path  path.Path
+}
+
+func (*modelUpdate) Error() string { return "update to model" }
 
 var (
 	absolute  = &er.EntityType{Name: "*"}
@@ -59,8 +67,6 @@ var (
 func (n modelEnv) extend(r *er.Relationship) modelEnv {
 	f := modelEnv{
 		m:       n.m,
-		indent:  n.indent + "\t",
-		changed: n.changed,
 		visited: append([]*er.Relationship{}, n.visited...),
 	}
 	f.visited = append(f.visited, r)
@@ -79,7 +85,11 @@ func (n modelEnv) implement(r *er.Relationship) (path.Path, error) {
 	}
 	var err error
 	var s path.Set = pathType{}
-	p := path.Chart(path.InverseTerm{"/" + r.Source.Name}, path.Term{"/" + r.Target.Name})
+	p := path.Chart(
+		path.InverseTerm{r.Source.Name},
+		path.Term{"*"},
+		path.Term{r.Target.Name},
+	)
 	if r.Path != "" {
 		q, err := path.Parse([]byte(r.Path))
 		if err != nil {
@@ -100,18 +110,19 @@ func (n modelEnv) addMissingAttributes(r *er.Relationship, p path.Path, s pathTy
 	}
 	var target set
 	for _, p := range s {
-		if p.target.attrCount() > target.attrCount() {
+		if target.entityType == nil || p.target.attrCount() > target.attrCount() {
 			target = p.target
 		}
 	}
 	var err error
+	var attrs []*er.Attribute
 	for i, a := range r.Target.Attributes {
 		if !a.Identifying || target.contains(i) {
 			continue
 		}
 		err = errModelChanged
 		name := r.Name + "_" + a.Name
-		r.Source.Attributes = append(r.Source.Attributes, &er.Attribute{
+		attrs = append(attrs, &er.Attribute{
 			Name:        name,
 			Type:        a.Type,
 			Identifying: r.Identifying,
@@ -127,16 +138,27 @@ func (n modelEnv) addMissingAttributes(r *er.Relationship, p path.Path, s pathTy
 			p = path.Intersection{p, part}
 		}
 	}
-	if err == errModelChanged {
-		r.Path = p.String()
+	if len(attrs) != 0 {
+		return nil, &modelUpdate{
+			r:     r,
+			attrs: attrs,
+			path:  p,
+		}
 	}
 	return p, err
 }
 
 func (n modelEnv) Lookup(name string) (path.Set, error) {
 	var res pathType
+	var err error
+	if name == "*" {
+		return pathType{{
+			source: set{entityType: absolute},
+			target: set{entityType: absolute},
+		}}, nil
+	}
 	for _, e := range n.m.Types {
-		if "/"+e.Name == name {
+		if e.Name == name {
 			res = append(res, partition{
 				source: set{entityType: absolute},
 				target: set{entityType: e},
@@ -156,9 +178,13 @@ func (n modelEnv) Lookup(name string) (path.Set, error) {
 				continue
 			}
 			f := n.extend(r)
-			p, err := f.implement(r)
-			if err != nil {
-				return nil, err
+			p, e := f.implement(r)
+			if e, ok := e.(*modelUpdate); ok {
+				return nil, e
+			}
+			if e != nil {
+				err = e
+				continue
 			}
 			s, err := path.Eval(p, f)
 			if err != nil {
@@ -167,7 +193,11 @@ func (n modelEnv) Lookup(name string) (path.Set, error) {
 			res = append(res, (s.(pathType))...)
 		}
 	}
-	return res.prune(), nil
+	res = res.prune()
+	if len(res) != 0 {
+		return res, nil
+	}
+	return res, err
 }
 
 func (e modelEnv) seen(r *er.Relationship) bool {
@@ -226,7 +256,7 @@ func (left pathType) Union(right path.Set) path.Set {
 	panic("unimplemented")
 }
 
-func (pt pathType) prune() path.Set {
+func (pt pathType) prune() pathType {
 	if len(pt) < 2 {
 		return pt
 	}
