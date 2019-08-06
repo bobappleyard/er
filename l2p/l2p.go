@@ -52,6 +52,17 @@ func LogicalToPhysical(m *er.EntityModel) error {
 	return nil
 }
 
+func key(e *er.EntityType) []*er.Attribute {
+	key := make([]*er.Attribute, 0, len(e.Attributes))
+	for _, a := range e.Attributes {
+		if !a.Identifying {
+			continue
+		}
+		key = append(key, a)
+	}
+	return key
+}
+
 var (
 	absoluteType   = &er.EntityType{Name: "*"}
 	valueType      = &er.EntityType{Name: "$"}
@@ -61,8 +72,7 @@ var (
 type resolvedPath interface {
 	route() (source, target *er.EntityType)
 	appendRels(rels []*er.Relationship) []*er.Relationship
-	provides(ctx *analysisCtx, a *er.Attribute) bool
-	inverseProvides(ctx *analysisCtx, a *er.Attribute) bool
+	provides(ctx *analysisCtx, inv bool, a *er.Attribute) bool
 }
 
 type absolute struct{}
