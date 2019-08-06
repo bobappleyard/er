@@ -53,9 +53,9 @@ type Dependency struct {
 	Sequence bool
 }
 
-// func (a *Attribute) String() string {
-// 	return fmt.Sprintf("%s.%s", a.Owner.Name, a.Name)
-// }
+func (a *Attribute) String() string {
+	return fmt.Sprintf("%s.%s", a.Owner.Name, a.Name)
+}
 
 func (t *EntityType) String() string {
 	return t.Name

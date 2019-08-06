@@ -114,7 +114,7 @@ func init() {
 			if res == nil {
 				return res
 			}
-			return Inverse(res)
+			return Inverse{res}
 		},
 		openTok: func(p *parser) Path {
 			path := p.parse(0)
@@ -130,11 +130,11 @@ func init() {
 			return Join{left, right}
 		}},
 		andTok: infix{70, func(p *parser, left Path) Path {
-			right := p.parse(79)
+			right := p.parse(70)
 			return Intersection{left, right}
 		}},
 		orTok: infix{70, func(p *parser, left Path) Path {
-			right := p.parse(79)
+			right := p.parse(70)
 			return Union{left, right}
 		}},
 	}

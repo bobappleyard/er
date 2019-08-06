@@ -51,30 +51,22 @@ func TestParse(t *testing.T) {
 			outp: Intersection{
 				Intersection{
 					Join{
-						InverseTerm{"a"},
+						Inverse{Term{"a"}},
 						Join{Term{"*"}, Term{"c"}},
 					},
-					Join{Term{"a"}, Join{Term{"s"}, InverseTerm{"b"}}},
+					Join{Term{"a"}, Join{Term{"s"}, Inverse{Term{"b"}}}},
 				},
-				Join{Term{"b_name"}, InverseTerm{"name"}},
+				Join{Term{"b_name"}, Inverse{Term{"name"}}},
 			},
 		},
 		{
 			name: "arcRec",
 			inp:  `owner|parent/scope`,
 			outp: Union{Term{"owner"}, Join{Term{"parent"}, Term{"scope"}}},
-		},
-		{
-			name: "squareInv",
-			inp:  `~(a/s/~b&b_name/~name)`,
-			outp: Intersection{
-				Join{Join{Term{"b"}, InverseTerm{"s"}}, InverseTerm{"a"}},
-				Join{Term{"name"}, InverseTerm{"b_name"}},
-			},
 		}, {
 			name: "unionInv",
 			inp:  `~(a|b)`,
-			outp: Union{InverseTerm{"a"}, InverseTerm{"b"}},
+			outp: Inverse{Union{Term{"a"}, Term{"b"}}},
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {

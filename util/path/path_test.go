@@ -18,6 +18,10 @@ func (e testEnv) Lookup(name string) (Set, error) {
 	return testSet(name), nil
 }
 
+func (e testEnv) Wrap(value string) (Set, error) {
+	return testSet("'" + value + "'"), nil
+}
+
 type testSet string
 
 func (s testSet) Inverse() Set {

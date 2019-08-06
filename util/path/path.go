@@ -9,12 +9,16 @@ type Path interface {
 	path()
 }
 
+type Value struct {
+	Value string
+}
+
 type Term struct {
 	Name string
 }
 
-type InverseTerm struct {
-	Name string
+type Inverse struct {
+	Path Path
 }
 
 type Join struct {
@@ -29,41 +33,19 @@ type Union struct {
 	Left, Right Path
 }
 
+func (Value) path()        {}
 func (Term) path()         {}
-func (InverseTerm) path()  {}
+func (Inverse) path()      {}
 func (Join) path()         {}
 func (Intersection) path() {}
 func (Union) path()        {}
 
+func (p Value) String() string        { return fmt.Sprintf("'%s'", p.Value) }
 func (p Term) String() string         { return p.Name }
-func (p InverseTerm) String() string  { return "~" + p.Name }
+func (p Inverse) String() string      { return fmt.Sprintf("~(%s)", p.Path) }
 func (p Join) String() string         { return fmt.Sprintf("(%s)/(%s)", p.Left, p.Right) }
 func (p Intersection) String() string { return fmt.Sprintf("(%s)&(%s)", p.Left, p.Right) }
 func (p Union) String() string        { return fmt.Sprintf("(%s)|(%s)", p.Left, p.Right) }
-
-func Chart(ps ...Path) Path {
-	res := ps[len(ps)-1]
-	for i := len(ps) - 2; i >= 0; i-- {
-		res = Join{ps[i], res}
-	}
-	return res
-}
-
-func Inverse(path Path) Path {
-	switch path := path.(type) {
-	case Term:
-		return InverseTerm{path.Name}
-	case InverseTerm:
-		return Term{path.Name}
-	case Join:
-		return Join{Inverse(path.Right), Inverse(path.Left)}
-	case Intersection:
-		return Intersection{Inverse(path.Left), Inverse(path.Right)}
-	case Union:
-		return Union{Inverse(path.Left), Inverse(path.Right)}
-	}
-	panic("unreachable")
-}
 
 type Set interface {
 	Inverse() Set
@@ -74,14 +56,17 @@ type Set interface {
 
 type Env interface {
 	Lookup(name string) (Set, error)
+	Wrap(value string) (Set, error)
 }
 
 func Eval(path Path, env Env) (Set, error) {
 	switch path := path.(type) {
+	case Value:
+		return env.Wrap(path.Value)
 	case Term:
 		return env.Lookup(path.Name)
-	case InverseTerm:
-		s, err := env.Lookup(path.Name)
+	case Inverse:
+		s, err := Eval(path.Path, env)
 		if err != nil {
 			return nil, err
 		}

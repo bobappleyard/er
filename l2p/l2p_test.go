@@ -1,7 +1,6 @@
 package l2p
 
 import (
-	"github.com/bobappleyard/er/util/path"
 	"reflect"
 	"sort"
 	"testing"
@@ -9,18 +8,18 @@ import (
 	. "github.com/bobappleyard/er"
 )
 
-func testPath(t *testing.T, m *EntityModel, p string) {
-	env := modelEnv{m: m}
-	pt, err := path.Parse([]byte(p))
-	if err != nil {
-		panic(err)
-	}
-	s, err := path.Eval(pt, env)
-	if err != nil {
-		panic(err)
-	}
-	t.Logf("%s: %s", p, s)
-}
+// func testPath(t *testing.T, m *EntityModel, p string) {
+// 	env := modelEnv{m: m}
+// 	pt, err := path.Parse([]byte(p))
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	s, err := path.Eval(pt, env)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	t.Logf("%s: %s", p, s)
+// }
 
 func TestLine(t *testing.T) {
 	m := EntityModel{
