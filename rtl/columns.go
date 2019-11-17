@@ -4,6 +4,7 @@ import (
 	"strings"
 )
 
+
 type String struct {
 	columnID int
 	key      bool
